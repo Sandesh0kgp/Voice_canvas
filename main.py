@@ -11,6 +11,17 @@ from openai import OpenAI
 import requests
 from io import BytesIO
 
+# Configure pydub to use the correct ffmpeg path
+import os
+from pydub import AudioSegment
+
+if os.name == 'nt':  # Windows
+    AudioSegment.converter = r"C:\path\to\ffmpeg.exe"
+    AudioSegment.ffprobe = r"C:\path\to\ffprobe.exe"
+else:  # Linux/MacOS
+    AudioSegment.converter = "ffmpeg"
+    AudioSegment.ffprobe = "ffprobe"
+
 # Set page configuration
 st.set_page_config(
     page_title="VoiceCanvas",
