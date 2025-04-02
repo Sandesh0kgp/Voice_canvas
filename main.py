@@ -3,12 +3,13 @@ import re
 import tempfile
 import os
 import time
-import base64
-from io import BytesIO
 import json
 from datetime import datetime
 import pandas as pd
 from pydub import AudioSegment
+from openai import OpenAI
+import requests
+from io import BytesIO
 
 # Set page configuration
 st.set_page_config(
@@ -34,6 +35,13 @@ st.markdown("""
         background-color: #19A7CE;
         color: white;
     }
+    .api-input {
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+        padding: 1rem;
+        background-color: #f0f2f6;
+        border-radius: 0.5rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -48,19 +56,26 @@ if 'final_audio' not in st.session_state:
     st.session_state.final_audio = None
 if 'current_step' not in st.session_state:
     st.session_state.current_step = 1
+if 'api_key' not in st.session_state:
+    st.session_state.api_key = None
+if 'api_provider' not in st.session_state:
+    st.session_state.api_provider = "openai"
 
 # Define voice models
-voice_models = {
-    "Neutral Narrator": "neutral_narrator",
-    "Young Male": "young_male",
-    "Young Female": "young_female",
-    "Elder Male": "elder_male",
-    "Elder Female": "elder_female",
-    "Child": "child",
-    "Villain": "villain",
-    "Hero": "hero",
-    "Comic Relief": "comic_relief"
+openai_voice_models = {
+    "Alloy (Neutral)": "alloy",
+    "Echo (Male)": "echo",
+    "Fable (Male)": "fable",
+    "Onyx (Male)": "onyx",
+    "Nova (Female)": "nova",
+    "Shimmer (Female)": "shimmer"
 }
+
+# Function to initialize OpenAI client
+def get_openai_client():
+    if st.session_state.api_key:
+        return OpenAI(api_key=st.session_state.api_key)
+    return None
 
 # Function to parse text from string
 def parse_text_from_string(text):
@@ -101,12 +116,39 @@ def parse_text_from_file(file):
     text = file.getvalue().decode('utf-8')
     return parse_text_from_string(text)
 
-# Function to generate voice (mock implementation)
-def generate_voice(text, voice_model, speed=1.0, pitch=0, emotion=None):
+# Function to generate voice using OpenAI
+def generate_voice_openai(text, voice_model, speed=1.0, pitch=0, emotion=None):
+    """Generate voice audio from text using OpenAI's TTS API."""
+    try:
+        client = get_openai_client()
+        if not client:
+            st.error("OpenAI API key not set. Please enter your API key.")
+            return None
+            
+        # Apply emotion through text modification if provided
+        if emotion:
+            text = f"[{emotion}] {text}"
+        
+        # Call OpenAI TTS API
+        response = client.audio.speech.create(
+            model="tts-1",
+            voice=voice_model,
+            input=text,
+            speed=speed
+        )
+        
+        # Save the audio to a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
+            response.stream_to_file(temp_file.name)
+            return temp_file.name
+            
+    except Exception as e:
+        st.error(f"Error generating audio: {str(e)}")
+        return None
+
+# Function to generate voice (mock implementation as fallback)
+def generate_voice_mock(text, voice_model, speed=1.0, pitch=0, emotion=None):
     """Generate voice audio from text (mock implementation)."""
-    # In a real implementation, this would call an API like ElevenLabs
-    # For now, we'll create a silent audio segment as a placeholder
-    
     # Simulate processing time
     time.sleep(0.5)
     
@@ -120,6 +162,14 @@ def generate_voice(text, voice_model, speed=1.0, pitch=0, emotion=None):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
         audio.export(temp_file.name, format="mp3")
         return temp_file.name
+
+# Function to generate voice (router)
+def generate_voice(text, voice_model, speed=1.0, pitch=0, emotion=None):
+    """Route to appropriate voice generation function based on API provider."""
+    if st.session_state.api_provider == "openai" and st.session_state.api_key:
+        return generate_voice_openai(text, voice_model, speed, pitch, emotion)
+    else:
+        return generate_voice_mock(text, voice_model, speed, pitch, emotion)
 
 # Function to combine audio files
 def combine_audio_files(audio_files):
@@ -151,16 +201,31 @@ def save_user_preferences(preferences):
 st.markdown("<h1 class='main-header'>VoiceCanvas</h1>", unsafe_allow_html=True)
 st.markdown("<h2 class='sub-header'>Transform Text into Character-Driven Audio</h2>", unsafe_allow_html=True)
 
-# Sidebar for navigation
-st.sidebar.title("Navigation")
-step = st.sidebar.radio(
-    "Process Steps",
-    ["1. Text Input", "2. Character Mapping", "3. Voice Generation", "4. Audio Output"],
-    index=st.session_state.current_step - 1
-)
-
-# Update current step based on selection
-st.session_state.current_step = int(step[0])
+# API Key Configuration
+with st.sidebar:
+    st.title("API Configuration")
+    
+    api_provider = st.radio("Select API Provider", ["OpenAI", "Mock (No API)"], index=0 if st.session_state.api_provider == "openai" else 1)
+    st.session_state.api_provider = api_provider.lower()
+    
+    if st.session_state.api_provider == "openai":
+        api_key = st.text_input("Enter OpenAI API Key", type="password", value=st.session_state.api_key if st.session_state.api_key else "")
+        if api_key:
+            st.session_state.api_key = api_key
+            st.success("API Key set successfully!")
+        else:
+            st.warning("Please enter your OpenAI API key to use voice generation.")
+    
+    st.markdown("---")
+    st.title("Navigation")
+    step = st.radio(
+        "Process Steps",
+        ["1. Text Input", "2. Character Mapping", "3. Voice Generation", "4. Audio Output"],
+        index=st.session_state.current_step - 1
+    )
+    
+    # Update current step based on selection
+    st.session_state.current_step = int(step[0])
 
 # Step 1: Text Input
 if st.session_state.current_step == 1:
@@ -187,7 +252,7 @@ if st.session_state.current_step == 1:
                 # Continue button
                 if st.button("Continue to Character Mapping"):
                     st.session_state.current_step = 2
-                    st.experimental_rerun()
+                    st.rerun()
                 
             except Exception as e:
                 st.error(f"Error parsing file: {str(e)}")
@@ -215,7 +280,7 @@ Parents (worried): Arjun, it's dangerous out there. Please stay home."""
                 # Continue button
                 if st.button("Continue to Character Mapping"):
                     st.session_state.current_step = 2
-                    st.experimental_rerun()
+                    st.rerun()
                     
             except Exception as e:
                 st.error(f"Error parsing text: {str(e)}")
@@ -228,19 +293,32 @@ elif st.session_state.current_step == 2:
         st.warning("Please upload or enter your text first!")
         if st.button("Go Back to Text Input"):
             st.session_state.current_step = 1
-            st.experimental_rerun()
+            st.rerun()
     else:
         # Get unique characters
         characters = list(set([entry['character'] for entry in st.session_state.parsed_data]))
         
         st.subheader("Assign voices to characters")
         
+        # Select voice models based on API provider
+        voice_models_to_use = openai_voice_models if st.session_state.api_provider == "openai" else {
+            "Neutral Narrator": "neutral_narrator",
+            "Young Male": "young_male",
+            "Young Female": "young_female",
+            "Elder Male": "elder_male",
+            "Elder Female": "elder_female",
+            "Child": "child",
+            "Villain": "villain",
+            "Hero": "hero",
+            "Comic Relief": "comic_relief"
+        }
+        
         # Create a form for character mapping
         with st.form("character_mapping_form"):
             for character in characters:
                 st.session_state.character_voices[character] = st.selectbox(
                     f"Voice for {character}:",
-                    options=list(voice_models.keys()),
+                    options=list(voice_models_to_use.keys()),
                     key=f"voice_{character}"
                 )
             
@@ -250,15 +328,15 @@ elif st.session_state.current_step == 2:
             # Update parsed data with voice models
             for entry in st.session_state.parsed_data:
                 character = entry["character"]
-                selected_voice = st.session_state.character_voices.get(character, "Neutral Narrator")
-                entry["voice_model"] = voice_models[selected_voice]
+                selected_voice = st.session_state.character_voices.get(character, list(voice_models_to_use.keys())[0])
+                entry["voice_model"] = voice_models_to_use[selected_voice]
             
             st.success("Characters mapped to voices successfully!")
             
             # Continue button
             if st.button("Continue to Voice Generation"):
                 st.session_state.current_step = 3
-                st.experimental_rerun()
+                st.rerun()
 
 # Step 3: Voice Generation
 elif st.session_state.current_step == 3:
@@ -268,8 +346,12 @@ elif st.session_state.current_step == 3:
         st.warning("Please map characters to voices first!")
         if st.button("Go Back to Character Mapping"):
             st.session_state.current_step = 2
-            st.experimental_rerun()
+            st.rerun()
     else:
+        # API warning if needed
+        if st.session_state.api_provider == "openai" and not st.session_state.api_key:
+            st.warning("⚠️ No OpenAI API key provided. Using mock audio generation instead. For real voice generation, please add your API key in the sidebar.")
+        
         # Voice customization options
         st.subheader("Voice Customization (Optional)")
         
@@ -326,7 +408,7 @@ elif st.session_state.current_step == 3:
                     # Continue button
                     if st.button("Continue to Audio Output"):
                         st.session_state.current_step = 4
-                        st.experimental_rerun()
+                        st.rerun()
                         
                 except Exception as e:
                     st.error(f"Error combining audio files: {str(e)}")
@@ -339,7 +421,7 @@ elif st.session_state.current_step == 4:
         st.warning("Please generate audio first!")
         if st.button("Go Back to Voice Generation"):
             st.session_state.current_step = 3
-            st.experimental_rerun()
+            st.rerun()
     else:
         st.subheader("Final Audio")
         
@@ -376,7 +458,7 @@ elif st.session_state.current_step == 4:
             st.session_state.audio_files = []
             st.session_state.final_audio = None
             st.session_state.current_step = 1
-            st.experimental_rerun()
+            st.rerun()
 
 # Footer
 st.markdown("---")
