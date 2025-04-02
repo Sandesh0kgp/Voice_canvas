@@ -4,5 +4,5 @@ pandas
 openai
 requests
 python-dotenv
-ffmpeg-python
+ffmpeg-python==0.2.0
 
