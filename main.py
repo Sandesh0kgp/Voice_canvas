@@ -173,13 +173,13 @@ def generate_voice_openai(text, voice_model, speed=1.0, pitch=0, emotion=None):
             raise ValueError("OpenAI client not initialized")
             
         if emotion:
-            text = f"[{emotion}] {text}"
+            text = f"[{emotion}] {text}]"
         
         response = client.audio.speech.create(
             model="tts-1",
             voice=voice_model,
             input=text,
-            speed=max(0.5, min(2.0, float(speed)))
+            speed=max(0.5, min(2.0, float(speed))))
             
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
             response.stream_to_file(tmp.name)
