@@ -1,6 +1,7 @@
 streamlit
 pydub
 pandas
+openai
+requests
 python-dotenv
-base64io
 ffmpeg-python
