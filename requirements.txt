@@ -4,10 +4,10 @@ ffmpeg-python
 numpy
 soundfile
 librosa
-gtts>=2.5.4
-openai>=1.70.0
-pandas>=2.2.3
-pydub>=0.25.1
-streamlit>=1.44.1
-torch>=2.6.0
-TTS>=0.22.0
+gtts
+openai
+pandas
+pydub
+streamlit
+torch
+TTS
