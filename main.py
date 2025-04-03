@@ -8,14 +8,9 @@ import random
 from datetime import datetime
 import pandas as pd
 from pydub import AudioSegment
-from openai import OpenAI
-import requests
 from io import BytesIO
 
 # Configure pydub to use the correct ffmpeg path
-import os
-from pydub import AudioSegment
-
 if os.name == 'nt':  # Windows
     AudioSegment.converter = r"C:\path\to\ffmpeg.exe"
     AudioSegment.ffprobe = r"C:\path\to\ffprobe.exe"
@@ -68,32 +63,68 @@ if 'final_audio' not in st.session_state:
     st.session_state.final_audio = None
 if 'current_step' not in st.session_state:
     st.session_state.current_step = 1
-if 'api_key' not in st.session_state:
-    st.session_state.api_key = os.environ.get("OPENAI_API_KEY")
-if 'api_provider' not in st.session_state:
-    st.session_state.api_provider = "openai"
 if 'voice_settings' not in st.session_state:
     st.session_state.voice_settings = {}
 if 'background_track' not in st.session_state:
     st.session_state.background_track = "None"
 if 'bg_volume' not in st.session_state:
     st.session_state.bg_volume = 0.3
+if 'tts_model_loaded' not in st.session_state:
+    st.session_state.tts_model_loaded = False
+if 'tts_model' not in st.session_state:
+    st.session_state.tts_model = None
+if 'api_provider' not in st.session_state:
+    st.session_state.api_provider = "openai"
+if 'api_key' not in st.session_state:
+    st.session_state.api_key = None
 
-# Define voice models
+# Define voice models for OpenAI
 openai_voice_models = {
-    "Alloy (Neutral)": "alloy",
-    "Echo (Male)": "echo",
-    "Fable (Male)": "fable",
-    "Onyx (Male)": "onyx",
-    "Nova (Female)": "nova",
-    "Shimmer (Female)": "shimmer"
+    "Alloy": "alloy",
+    "Echo": "echo",
+    "Fable": "fable",
+    "Onyx": "onyx",
+    "Nova": "nova",
+    "Shimmer": "shimmer"
 }
 
-# Function to initialize OpenAI client
-def get_openai_client():
-    if st.session_state.api_key:
-        return OpenAI(api_key=st.session_state.api_key)
-    return None
+# Define voice models for XTTS
+xtts_voice_models = {
+    "Neutral Narrator": "neutral_narrator",
+    "Young Male": "young_male",
+    "Young Female": "young_female",
+    "Elder Male": "elder_male",
+    "Elder Female": "elder_female",
+    "Child": "child",
+    "Villain": "villain",
+    "Hero": "hero",
+    "Comic Relief": "comic_relief"
+}
+
+# Function to load XTTS model
+def load_xtts_model():
+    """Load the XTTS model if not already loaded."""
+    if not st.session_state.tts_model_loaded:
+        try:
+            # Display loading message
+            with st.spinner("Loading XTTS model... This may take a minute."):
+                # Import TTS library
+                from TTS.api import TTS
+                import torch
+                
+                # Initialize TTS with XTTS-v2
+                tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", 
+                          gpu=torch.cuda.is_available())
+                
+                # Store the model in session state
+                st.session_state.tts_model = tts
+                st.session_state.tts_model_loaded = True
+                return True
+        except Exception as e:
+            st.error(f"Error loading XTTS model: {str(e)}")
+            st.info("Using mock audio generation instead.")
+            return False
+    return True
 
 # Function to parse text from string
 def parse_text_from_string(text):
@@ -134,41 +165,38 @@ def parse_text_from_file(file):
     text = file.getvalue().decode('utf-8')
     return parse_text_from_string(text)
 
-# Function to generate voice using OpenAI
-def generate_voice_openai(text, voice_model, speed=1.0, pitch=0, emotion=None):
-    """Generate voice audio from text using OpenAI's TTS API."""
+# Function to generate voice using XTTS
+def generate_voice_xtts(text, voice_model, speed=1.0, pitch=0, emotion=None):
+    """Generate voice audio from text using XTTS-v2."""
     try:
-        client = get_openai_client()
-        if not client:
-            st.error("OpenAI API key not set. Please enter your API key.")
-            return None
-            
+        if not st.session_state.tts_model_loaded:
+            if not load_xtts_model():
+                return generate_voice_mock(text, voice_model, speed, pitch, emotion)
+        
+        tts = st.session_state.tts_model
+        
         # Apply emotion through text modification if provided
         if emotion:
             text = f"[{emotion}] {text}"
         
-        # We no longer need this code since we're using streaming approach below
-        # response = client.audio.speech.create(
-        #     model="tts-1",
-        #     voice=voice_model,
-        #     input=text,
-        #     speed=speed
-        # )
+        # Create reference to voice file if it exists
+        reference_wav = f"reference_voices/{voice_model}.wav"
         
-        # Save the audio to a temporary file using proper streaming approach
+        # Save to temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
-            with client.audio.speech.with_streaming_response.create(
-                model="tts-1",
-                voice=voice_model,
-                input=text,
+            # Generate speech
+            tts.tts_to_file(
+                text=text,
+                file_path=temp_file.name,
+                speaker_wav=reference_wav if os.path.exists(reference_wav) else None,
+                language="en",
                 speed=speed
-            ) as streaming_response:
-                streaming_response.stream_to_file(temp_file.name)
+            )
             return temp_file.name
             
     except Exception as e:
-        st.error(f"Error generating audio: {str(e)}")
-        return None
+        st.error(f"Error generating audio with XTTS: {str(e)}")
+        return generate_voice_mock(text, voice_model, speed, pitch, emotion)
 
 # Function to generate voice (mock implementation as fallback)
 def generate_voice_mock(text, voice_model, speed=1.0, pitch=0, emotion=None):
@@ -189,11 +217,8 @@ def generate_voice_mock(text, voice_model, speed=1.0, pitch=0, emotion=None):
 
 # Function to generate voice (router)
 def generate_voice(text, voice_model, speed=1.0, pitch=0, emotion=None):
-    """Route to appropriate voice generation function based on API provider."""
-    if st.session_state.api_provider == "openai" and st.session_state.api_key:
-        return generate_voice_openai(text, voice_model, speed, pitch, emotion)
-    else:
-        return generate_voice_mock(text, voice_model, speed, pitch, emotion)
+    """Route to appropriate voice generation function."""
+    return generate_voice_xtts(text, voice_model, speed, pitch, emotion)
 
 # Dictionary of built-in background tracks
 BACKGROUND_TRACKS = {
@@ -442,7 +467,6 @@ def combine_audio_files(audio_files, background_track=None, bg_volume=0.3):
         
         # Mix the audio streams
         combined = combined.overlay(bg_audio, loop=False)
-    
     # Export combined audio
     output_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
     combined.export(output_path, format="mp3")
@@ -579,17 +603,7 @@ elif st.session_state.current_step == 2:
         st.subheader("Assign voices to characters")
         
         # Select voice models based on API provider
-        voice_models_to_use = openai_voice_models if st.session_state.api_provider == "openai" else {
-            "Neutral Narrator": "neutral_narrator",
-            "Young Male": "young_male",
-            "Young Female": "young_female",
-            "Elder Male": "elder_male",
-            "Elder Female": "elder_female",
-            "Child": "child",
-            "Villain": "villain",
-            "Hero": "hero",
-            "Comic Relief": "comic_relief"
-        }
+        voice_models_to_use = openai_voice_models if st.session_state.api_provider == "openai" else xtts_voice_models
         
         # Create a form for character mapping
         with st.form("character_mapping_form"):
@@ -674,17 +688,7 @@ elif st.session_state.current_step == 3:
             st.warning("⚠️ No OpenAI API key provided. Using mock audio generation instead. For real voice generation, please add your API key in the sidebar.")
         
         # Select voice models based on API provider
-        voice_models_to_use = openai_voice_models if st.session_state.api_provider == "openai" else {
-            "Neutral Narrator": "neutral_narrator",
-            "Young Male": "young_male",
-            "Young Female": "young_female",
-            "Elder Male": "elder_male",
-            "Elder Female": "elder_female",
-            "Child": "child",
-            "Villain": "villain",
-            "Hero": "hero",
-            "Comic Relief": "comic_relief"
-        }
+        voice_models_to_use = openai_voice_models if st.session_state.api_provider == "openai" else xtts_voice_models
         
         # Voice customization options
         st.subheader("Voice Customization (Optional)")
@@ -886,7 +890,9 @@ elif st.session_state.current_step == 4:
             st.session_state.parsed_data = []
             st.session_state.character_voices = {}
             st.session_state.audio_files = []
+            st.session_state.audio_files = []
             st.session_state.final_audio = None
+            st.session_state.voice_settings = {}
             st.session_state.background_track = "None"
             st.session_state.bg_volume = 0.3
             st.session_state.current_step = 1
