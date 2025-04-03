@@ -10,6 +10,9 @@ import pandas as pd
 from pydub import AudioSegment
 from io import BytesIO
 
+# Configure FFmpeg path for Streamlit Cloud
+os.environ["PATH"] += os.pathsep + '/usr/bin/ffmpeg'
+
 # Configure pydub to use the correct ffmpeg path
 if os.name == 'nt':  # Windows
     AudioSegment.converter = r"C:\path\to\ffmpeg.exe"
@@ -69,10 +72,6 @@ if 'background_track' not in st.session_state:
     st.session_state.background_track = "None"
 if 'bg_volume' not in st.session_state:
     st.session_state.bg_volume = 0.3
-if 'tts_model_loaded' not in st.session_state:
-    st.session_state.tts_model_loaded = False
-if 'tts_model' not in st.session_state:
-    st.session_state.tts_model = None
 if 'api_provider' not in st.session_state:
     st.session_state.api_provider = "openai"
 if 'api_key' not in st.session_state:
@@ -88,8 +87,8 @@ openai_voice_models = {
     "Shimmer": "shimmer"
 }
 
-# Define voice models for XTTS
-xtts_voice_models = {
+# Define voice models for Mock API
+mock_voice_models = {
     "Neutral Narrator": "neutral_narrator",
     "Young Male": "young_male",
     "Young Female": "young_female",
@@ -100,31 +99,6 @@ xtts_voice_models = {
     "Hero": "hero",
     "Comic Relief": "comic_relief"
 }
-
-# Function to load XTTS model
-def load_xtts_model():
-    """Load the XTTS model if not already loaded."""
-    if not st.session_state.tts_model_loaded:
-        try:
-            # Display loading message
-            with st.spinner("Loading XTTS model... This may take a minute."):
-                # Import TTS library
-                from TTS.api import TTS
-                import torch
-                
-                # Initialize TTS with XTTS-v2
-                tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", 
-                          gpu=torch.cuda.is_available())
-                
-                # Store the model in session state
-                st.session_state.tts_model = tts
-                st.session_state.tts_model_loaded = True
-                return True
-        except Exception as e:
-            st.error(f"Error loading XTTS model: {str(e)}")
-            st.info("Using mock audio generation instead.")
-            return False
-    return True
 
 # Function to parse text from string
 def parse_text_from_string(text):
@@ -165,40 +139,7 @@ def parse_text_from_file(file):
     text = file.getvalue().decode('utf-8')
     return parse_text_from_string(text)
 
-# Function to generate voice using XTTS
-def generate_voice_xtts(text, voice_model, speed=1.0, pitch=0, emotion=None):
-    """Generate voice audio from text using XTTS-v2."""
-    try:
-        if not st.session_state.tts_model_loaded:
-            if not load_xtts_model():
-                return generate_voice_mock(text, voice_model, speed, pitch, emotion)
-        
-        tts = st.session_state.tts_model
-        
-        # Apply emotion through text modification if provided
-        if emotion:
-            text = f"[{emotion}] {text}"
-        
-        # Create reference to voice file if it exists
-        reference_wav = f"reference_voices/{voice_model}.wav"
-        
-        # Save to temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
-            # Generate speech
-            tts.tts_to_file(
-                text=text,
-                file_path=temp_file.name,
-                speaker_wav=reference_wav if os.path.exists(reference_wav) else None,
-                language="en",
-                speed=speed
-            )
-            return temp_file.name
-            
-    except Exception as e:
-        st.error(f"Error generating audio with XTTS: {str(e)}")
-        return generate_voice_mock(text, voice_model, speed, pitch, emotion)
-
-# Function to generate voice (mock implementation as fallback)
+# Function to generate voice (mock implementation)
 def generate_voice_mock(text, voice_model, speed=1.0, pitch=0, emotion=None):
     """Generate voice audio from text (mock implementation)."""
     # Simulate processing time
@@ -214,11 +155,6 @@ def generate_voice_mock(text, voice_model, speed=1.0, pitch=0, emotion=None):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
         audio.export(temp_file.name, format="mp3")
         return temp_file.name
-
-# Function to generate voice (router)
-def generate_voice(text, voice_model, speed=1.0, pitch=0, emotion=None):
-    """Route to appropriate voice generation function."""
-    return generate_voice_xtts(text, voice_model, speed, pitch, emotion)
 
 # Dictionary of built-in background tracks
 BACKGROUND_TRACKS = {
@@ -237,248 +173,71 @@ BACKGROUND_TRACKS = {
 def get_background_music(track_name, duration_ms):
     """Get background music track or create silent audio if track not available."""
     if track_name == "None" or not track_name:
-        # Return silent audio of appropriate length
         return AudioSegment.silent(duration=duration_ms)
         
-    # Create simulated ambient sounds based on the name
-    # In a real implementation, these would be real audio files
+    # Create simulated ambient sounds
     base_audio = AudioSegment.silent(duration=duration_ms)
     
     # Generate some ambient sounds based on the track name
-    # This is a simplified mock implementation using noise and filters
     if "nature" in track_name.lower():
-        # Nature sounds: soft wind and occasional bird chirps
         base = AudioSegment.silent(duration=5000)
-        
-        # Generate wind-like white noise
         for i in range(0, 5000, 500):
-            # Vary the volume to simulate wind gusts
             vol_factor = random.uniform(0.2, 0.4)
             wind = AudioSegment.silent(duration=300)
             wind = wind.low_pass_filter(500)
-            wind = wind - int(30 * (1 - vol_factor))  # Adjust volume
+            wind = wind - int(30 * (1 - vol_factor))
             base = base.overlay(wind, position=i)
             
-        # Add occasional bird chirps
         for i in range(0, 5000, 1500):
-            if random.random() > 0.5:  # 50% chance of a chirp
-                # Bird chirp: short high-pitched sound
+            if random.random() > 0.5:
                 chirp_len = random.randint(50, 150)
                 chirp = AudioSegment.silent(duration=chirp_len)
                 chirp = chirp.high_pass_filter(3000)
                 base = base.overlay(chirp, position=i)
         
-        # Loop this segment to fill the duration
         repeats = (duration_ms // 5000) + 1
         ambient = base * repeats
-        ambient = ambient[:duration_ms]  # Trim to exact length
-        
-    elif "sci-fi" in track_name.lower():
-        # Sci-fi sounds: electronic beeps and background hum
-        base = AudioSegment.silent(duration=8000)
-        
-        # Background electronic hum
-        hum = AudioSegment.silent(duration=8000)
-        hum = hum.low_pass_filter(200)
-        base = base.overlay(hum)
-        
-        # Random electronic beeps
-        for i in range(0, 8000, 800):
-            if random.random() > 0.6:  # 40% chance of a beep
-                beep_len = random.randint(20, 100)
-                beep = AudioSegment.silent(duration=beep_len)
-                
-                # Randomize filter to get different tones
-                if random.random() > 0.5:
-                    beep = beep.high_pass_filter(random.randint(2000, 4000))
-                else:
-                    beep = beep.low_pass_filter(random.randint(500, 1500))
-                    
-                base = base.overlay(beep, position=i)
-                
-        # Loop this segment to fill the duration
-        repeats = (duration_ms // 8000) + 1
-        ambient = base * repeats
-        ambient = ambient[:duration_ms]  # Trim to exact length
-        
-    elif "suspense" in track_name.lower() or "horror" in track_name.lower():
-        # Suspenseful/horror sounds: low rumble with occasional string hits
-        base = AudioSegment.silent(duration=10000)
-        
-        # Add low rumble throughout
-        rumble = AudioSegment.silent(duration=10000)
-        rumble = rumble.low_pass_filter(100)
-        base = base.overlay(rumble)
-        
-        # Add occasional string hits or sudden noises
-        for i in range(0, 10000, 2500):
-            if random.random() > 0.7:  # 30% chance
-                hit_len = random.randint(200, 500)
-                hit = AudioSegment.silent(duration=hit_len)
-                hit = hit.high_pass_filter(1000)
-                hit = hit - 10  # Make it louder
-                base = base.overlay(hit, position=i)
-                
-        # Loop this segment to fill the duration
-        repeats = (duration_ms // 10000) + 1
-        ambient = base * repeats
-        ambient = ambient[:duration_ms]  # Trim to exact length
-        
-    elif "fantasy" in track_name.lower():
-        # Fantasy adventure: mystical atmosphere with occasional chimes
-        base = AudioSegment.silent(duration=12000)
-        
-        # Base atmospheric sound
-        atmos = AudioSegment.silent(duration=12000)
-        atmos = atmos.low_pass_filter(800)
-        base = base.overlay(atmos)
-        
-        # Add occasional chimes or harp-like sounds
-        for i in range(0, 12000, 1200):
-            if random.random() > 0.7:  # 30% chance
-                chime_len = random.randint(50, 150)
-                chime = AudioSegment.silent(duration=chime_len)
-                chime = chime.high_pass_filter(3000)
-                chime = chime - 15  # Volume adjustment
-                base = base.overlay(chime, position=i)
-                
-        # Loop this segment to fill the duration
-        repeats = (duration_ms // 12000) + 1
-        ambient = base * repeats
-        ambient = ambient[:duration_ms]  # Trim to exact length
-        
-    elif "urban" in track_name.lower() or "city" in track_name.lower():
-        # Urban city: distant traffic and occasional horns
-        base = AudioSegment.silent(duration=15000)
-        
-        # Traffic noise
-        traffic = AudioSegment.silent(duration=15000)
-        traffic = traffic.low_pass_filter(1000)
-        base = base.overlay(traffic)
-        
-        # Occasional car horns or city sounds
-        for i in range(0, 15000, 3000):
-            if random.random() > 0.6:  # 40% chance
-                horn_len = random.randint(100, 300)
-                horn = AudioSegment.silent(duration=horn_len)
-                
-                # Randomize filter for different horn sounds
-                filter_freq = random.randint(500, 2000)
-                horn = horn.low_pass_filter(filter_freq)
-                horn = horn - 20  # Volume adjustment
-                base = base.overlay(horn, position=i)
-                
-        # Loop this segment to fill the duration
-        repeats = (duration_ms // 15000) + 1
-        ambient = base * repeats
-        ambient = ambient[:duration_ms]  # Trim to exact length
-        
-    elif "comedy" in track_name.lower():
-        # Comedy background: light and upbeat sounds
-        base = AudioSegment.silent(duration=6000)
-        
-        # Light background sounds
-        for i in range(0, 6000, 600):
-            if random.random() > 0.7:  # 30% chance
-                sound_len = random.randint(50, 200)
-                sound = AudioSegment.silent(duration=sound_len)
-                sound = sound.high_pass_filter(random.randint(1000, 2000))
-                sound = sound - 15  # Volume adjustment
-                base = base.overlay(sound, position=i)
-                
-        # Loop this segment to fill the duration
-        repeats = (duration_ms // 6000) + 1
-        ambient = base * repeats
-        ambient = ambient[:duration_ms]  # Trim to exact length
-        
-    elif "romantic" in track_name.lower():
-        # Romantic scene: soft and gentle atmosphere
-        base = AudioSegment.silent(duration=10000)
-        
-        # Soft background sounds
-        atmos = AudioSegment.silent(duration=10000)
-        atmos = atmos.low_pass_filter(600)
-        base = base.overlay(atmos)
-        
-        # Occasional gentle notes
-        for i in range(0, 10000, 2000):
-            if random.random() > 0.6:  # 40% chance
-                note_len = random.randint(100, 300)
-                note = AudioSegment.silent(duration=note_len)
-                note = note.low_pass_filter(random.randint(800, 1200))
-                note = note - 20  # Volume adjustment
-                base = base.overlay(note, position=i)
-                
-        # Loop this segment to fill the duration
-        repeats = (duration_ms // 10000) + 1
-        ambient = base * repeats
-        ambient = ambient[:duration_ms]  # Trim to exact length
-        
+        ambient = ambient[:duration_ms]
     else:
-        # Generic ambient sound for other track types
+        # Generic ambient sound
         base = AudioSegment.silent(duration=5000)
-        
-        # Add some subtle background noise
         noise = AudioSegment.silent(duration=5000)
         noise = noise.low_pass_filter(800)
         base = base.overlay(noise)
-        
-        # Loop this segment to fill the duration
         repeats = (duration_ms // 5000) + 1
         ambient = base * repeats
-        ambient = ambient[:duration_ms]  # Trim to exact length
+        ambient = ambient[:duration_ms]
     
     return ambient
 
 # Function to combine audio files
 def combine_audio_files(audio_files, background_track=None, bg_volume=0.3):
-    """Combine multiple audio files with a short pause between them and optional background music."""
+    """Combine multiple audio files with optional background music."""
     if not audio_files:
         return None
         
     combined = AudioSegment.empty()
-    pause = AudioSegment.silent(duration=500)  # 500ms pause
+    pause = AudioSegment.silent(duration=500)
     
-    # First pass: combine all dialogue audio and calculate total length
     for file_path in audio_files:
         audio = AudioSegment.from_mp3(file_path)
         combined += audio + pause
     
-    # If background track is specified, mix it with the combined audio
     if background_track and background_track != "None":
-        # Get the total duration of the combined dialogue
         total_duration = len(combined)
-        
-        # Get the background music of appropriate length
         bg_audio = get_background_music(background_track, total_duration)
+        bg_audio = bg_audio - (1 - bg_volume) * 20
         
-        # Adjust the volume of background music (0.3 = 30% of original volume)
-        bg_audio = bg_audio - (1 - bg_volume) * 20  # Adjust volume (in dB)
-        
-        # Mix the background audio with the combined dialogue
-        # Make sure bg_audio is at least as long as combined
         if len(bg_audio) < len(combined):
-            # Loop the background audio if needed
             repeat_count = (len(combined) // len(bg_audio)) + 1
             bg_audio = bg_audio * repeat_count
             
-        # Trim to match the dialogue length
         bg_audio = bg_audio[:len(combined)]
-        
-        # Mix the audio streams
         combined = combined.overlay(bg_audio, loop=False)
-    # Export combined audio
+    
     output_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
     combined.export(output_path, format="mp3")
     return output_path
-
-# Function to save user preferences
-def save_user_preferences(preferences):
-    """Save user preferences to a file."""
-    # In a real implementation, this would save to a database
-    # For now, we'll just print the preferences
-    print(f"Saving preferences: {preferences}")
-    return True
 
 # Function to get voice settings for a character
 def get_voice_settings(character):
@@ -496,7 +255,6 @@ def get_voice_model_id(voice_name):
     if st.session_state.api_provider == "openai":
         return openai_voice_models.get(voice_name, "alloy")
     else:
-        # For mock API, just return the name
         return voice_name.lower().replace(" ", "_")
 
 # App header
@@ -542,7 +300,6 @@ if st.session_state.current_step == 1:
                 st.session_state.parsed_data = parse_text_from_file(uploaded_file)
                 st.success(f"Successfully parsed {len(st.session_state.parsed_data)} dialogue entries!")
                 
-                # Display parsed data
                 st.subheader("Preview:")
                 for i, entry in enumerate(st.session_state.parsed_data[:5]):
                     emotion_text = f" ({entry['emotion']})" if entry['emotion'] else ""
@@ -551,7 +308,6 @@ if st.session_state.current_step == 1:
                 if len(st.session_state.parsed_data) > 5:
                     st.text(f"... and {len(st.session_state.parsed_data) - 5} more entries")
                 
-                # Continue button
                 if st.button("Continue to Character Mapping"):
                     st.session_state.current_step = 2
                     st.rerun()
@@ -559,7 +315,7 @@ if st.session_state.current_step == 1:
             except Exception as e:
                 st.error(f"Error parsing file: {str(e)}")
     
-    else:  # Direct Text Entry
+    else:
         sample_text = """Narrator: Once upon a time, in a small village, there lived a boy named Arjun.
 Arjun (happy): I want to explore the world beyond these mountains!
 Narrator: But Arjun's parents were worried about his safety.
@@ -573,13 +329,11 @@ Parents (worried): Arjun, it's dangerous out there. Please stay home."""
                 st.session_state.parsed_data = parse_text_from_string(text_input)
                 st.success(f"Successfully parsed {len(st.session_state.parsed_data)} dialogue entries!")
                 
-                # Display parsed data
                 st.subheader("Preview:")
                 for entry in st.session_state.parsed_data:
                     emotion_text = f" ({entry['emotion']})" if entry['emotion'] else ""
                     st.text(f"{entry['character']}{emotion_text}: {entry['dialogue'][:50]}...")
                 
-                # Continue button
                 if st.button("Continue to Character Mapping"):
                     st.session_state.current_step = 2
                     st.rerun()
@@ -597,16 +351,14 @@ elif st.session_state.current_step == 2:
             st.session_state.current_step = 1
             st.rerun()
     else:
-        # Get unique characters
         characters = list(set([entry['character'] for entry in st.session_state.parsed_data]))
-        
         st.subheader("Assign voices to characters")
         
-        # Select voice models based on API provider
-        voice_models_to_use = openai_voice_models if st.session_state.api_provider == "openai" else xtts_voice_models
+        voice_models_to_use = openai_voice_models if st.session_state.api_provider == "openai" else mock_voice_models
         
-        # Create a form for character mapping
-        with st.form("character_mapping_form"):
+        # Character mapping form
+        form = st.form("character_mapping_form")
+        with form:
             for character in characters:
                 col1, col2 = st.columns([3, 1])
                 
@@ -620,7 +372,6 @@ elif st.session_state.current_step == 2:
                     st.session_state.character_voices[character] = voice_selection
                 
                 with col2:
-                    # Advanced settings expander
                     with st.expander("Voice Settings"):
                         settings = get_voice_settings(character)
                         settings["speed"] = st.slider(
@@ -631,31 +382,22 @@ elif st.session_state.current_step == 2:
                             step=0.1,
                             key=f"speed_{character}"
                         )
-                        
-                        # Store the updated settings
                         st.session_state.voice_settings[character] = settings
             
-            submit_button = st.form_submit_button("Save Voice Mappings")
+            submitted = form.form_submit_button("Save Voice Mappings")
         
-        if submit_button:
+        if submitted:
             st.success("Voice mappings saved successfully!")
             
-            # Show a preview button for testing
+            # Preview section outside the form
             if st.button("Preview a Random Line"):
-                # Select a random entry
-                import random
                 entry = random.choice(st.session_state.parsed_data)
-                
-                # Get voice model for this character
                 voice_name = st.session_state.character_voices.get(entry["character"], list(voice_models_to_use.keys())[0])
                 voice_model = get_voice_model_id(voice_name)
-                
-                # Get voice settings
                 settings = get_voice_settings(entry["character"])
                 
-                # Generate preview audio
                 with st.spinner(f"Generating preview for '{entry['character']}'..."):
-                    audio_file = generate_voice(
+                    audio_file = generate_voice_mock(
                         entry["dialogue"],
                         voice_model,
                         speed=settings["speed"],
@@ -667,9 +409,8 @@ elif st.session_state.current_step == 2:
                     else:
                         st.error("Failed to generate preview audio.")
             
-            # Continue button
+            # Continue button outside the form
             if st.button("Continue to Voice Generation"):
-                # Move to next step
                 st.session_state.current_step = 3
                 st.rerun()
 
@@ -683,54 +424,45 @@ elif st.session_state.current_step == 3:
             st.session_state.current_step = 2
             st.rerun()
     else:
-        # API warning if needed
         if st.session_state.api_provider == "openai" and not st.session_state.api_key:
-            st.warning("⚠️ No OpenAI API key provided. Using mock audio generation instead. For real voice generation, please add your API key in the sidebar.")
+            st.warning("⚠️ No OpenAI API key provided. Using mock audio generation instead.")
         
-        # Select voice models based on API provider
-        voice_models_to_use = openai_voice_models if st.session_state.api_provider == "openai" else xtts_voice_models
+        voice_models_to_use = openai_voice_models if st.session_state.api_provider == "openai" else mock_voice_models
         
-        # Voice customization options
         st.subheader("Voice Customization (Optional)")
-        
         col1, col2 = st.columns(2)
         with col1:
             speed = st.slider("Speech Speed:", min_value=0.5, max_value=2.0, value=1.0, step=0.1)
         with col2:
             pitch = st.slider("Voice Pitch:", min_value=-20, max_value=20, value=0, step=5)
             
-        # Background music selection
         st.subheader("Background Music (Optional)")
-        st.markdown("🎵 Add ambient sounds or music to enhance your audio story and create an immersive atmosphere.")
+        st.markdown("🎵 Add ambient sounds or music to enhance your audio story.")
         
-        # Create a card-like interface for track selection
         track_container = st.container()
         with track_container:
             col1, col2 = st.columns(2)
             
             with col1:
-                # Background track selection with better descriptions
                 track_descriptions = {
                     "None": "No background audio",
-                    "Peaceful Nature": "Gentle ambient sounds of a forest with occasional bird chirps",
-                    "Sci-Fi Ambience": "Futuristic electronic tones and subtle beeps",
-                    "Suspenseful Mystery": "Tense atmospheric sounds with occasional startling elements",
-                    "Fantasy Adventure": "Mystical ambient sounds with magical chimes",
-                    "Urban City": "City atmosphere with distant traffic and occasional street sounds",
-                    "Romantic Scene": "Soft, gentle ambient tones for emotional moments",
-                    "Horror Ambience": "Dark, unsettling sounds with occasional suspenseful elements",
-                    "Comedy Background": "Light, playful ambient sounds for humorous scenes"
+                    "Peaceful Nature": "Gentle ambient sounds of a forest",
+                    "Sci-Fi Ambience": "Futuristic electronic tones",
+                    "Suspenseful Mystery": "Tense atmospheric sounds",
+                    "Fantasy Adventure": "Mystical ambient sounds",
+                    "Urban City": "City atmosphere with distant traffic",
+                    "Romantic Scene": "Soft, gentle ambient tones",
+                    "Horror Ambience": "Dark, unsettling sounds",
+                    "Comedy Background": "Light, playful ambient sounds"
                 }
                 
                 background_track = st.selectbox(
                     "Select Background Track:",
                     options=list(BACKGROUND_TRACKS.keys()),
-                    index=list(BACKGROUND_TRACKS.keys()).index(st.session_state.background_track) if st.session_state.background_track in BACKGROUND_TRACKS else 0,
-                    format_func=lambda x: x  # Just show the name in the dropdown
+                    index=list(BACKGROUND_TRACKS.keys()).index(st.session_state.background_track) if st.session_state.background_track in BACKGROUND_TRACKS else 0
                 )
                 st.session_state.background_track = background_track
                 
-                # Show description of selected track
                 if background_track != "None":
                     st.info(track_descriptions.get(background_track, ""))
             
@@ -741,32 +473,26 @@ elif st.session_state.current_step == 3:
                     max_value=0.5, 
                     value=st.session_state.bg_volume,
                     step=0.05,
-                    format="%d%%",  # Format as percentage
-                    help="Higher values make background sounds louder relative to voices."
+                    format="%d%%"
                 )
                 st.session_state.bg_volume = bg_volume
                 
-                # Show a visual indicator of the volume level
                 vol_percent = int(bg_volume * 100)
                 if vol_percent < 20:
-                    st.caption("🔈 Subtle background (recommended for dialogue-heavy content)")
+                    st.caption("🔈 Subtle background")
                 elif vol_percent < 35:
-                    st.caption("🔉 Balanced mix of speech and background")
+                    st.caption("🔉 Balanced mix")
                 else:
-                    st.caption("🔊 Prominent background (good for atmospheric scenes)")
+                    st.caption("🔊 Prominent background")
                     
-        # Reset button for background settings
         if st.button("Reset Background Settings"):
             st.session_state.background_track = "None"
             st.session_state.bg_volume = 0.3
             st.rerun()
         
-        # Generate button
         if st.button("Generate Audio"):
-            # Clear previous audio files
             st.session_state.audio_files = []
             
-            # Show progress
             progress_container = st.container()
             with progress_container:
                 progress_bar = st.progress(0)
@@ -774,24 +500,20 @@ elif st.session_state.current_step == 3:
                 character_info = st.empty()
                 dialogue_preview = st.empty()
             
-            # Process each dialogue entry
             for i, entry in enumerate(st.session_state.parsed_data):
                 character = entry['character']
                 emotion_text = f" ({entry['emotion']})" if entry['emotion'] else ""
                 dialogue = entry['dialogue']
                 
-                # Update status display
                 status_text.markdown(f"**Generating audio...** ({i+1}/{len(st.session_state.parsed_data)})")
                 character_info.markdown(f"🎭 **Character:** {character}{emotion_text}")
                 dialogue_preview.markdown(f"💬 \"{dialogue[:100]}{'...' if len(dialogue) > 100 else ''}\"")
                 
                 try:
-                    # Get voice model for this character
                     voice_name = st.session_state.character_voices.get(character)
                     voice_model_id = get_voice_model_id(voice_name)
                     
-                    # Generate audio for this dialogue
-                    audio_file = generate_voice(
+                    audio_file = generate_voice_mock(
                         text=dialogue,
                         voice_model=voice_model_id,
                         speed=speed,
@@ -808,24 +530,18 @@ elif st.session_state.current_step == 3:
                 except Exception as e:
                     st.error(f"Error generating audio for {character}: {str(e)}")
                 
-                # Update progress
                 progress_bar.progress((i + 1) / len(st.session_state.parsed_data))
             
-            # Combine all audio files
             if st.session_state.audio_files:
                 status_text.text("Combining audio files...")
                 try:
                     file_paths = [af['file_path'] for af in st.session_state.audio_files]
-                    
-                    # Get background track and volume settings
                     background_track = BACKGROUND_TRACKS.get(st.session_state.background_track)
                     bg_volume = st.session_state.bg_volume
                     
-                    # If background track is selected, add an info message
                     if background_track and background_track != "None":
                         status_text.text(f"Adding '{st.session_state.background_track}' background track...")
                     
-                    # Combine audio with background music if selected
                     final_audio = combine_audio_files(
                         file_paths, 
                         background_track=background_track, 
@@ -835,7 +551,6 @@ elif st.session_state.current_step == 3:
                     st.session_state.final_audio = final_audio
                     status_text.text("Audio generation complete!")
                     
-                    # Continue button
                     if st.button("Continue to Audio Output"):
                         st.session_state.current_step = 4
                         st.rerun()
@@ -855,14 +570,11 @@ elif st.session_state.current_step == 4:
     else:
         st.subheader("Final Audio")
         
-        # Show background track info if used
         if st.session_state.background_track != "None":
             st.info(f"Background Track: {st.session_state.background_track} (Volume: {int(st.session_state.bg_volume * 100)}%)")
         
-        # Display audio player
         st.audio(st.session_state.final_audio)
         
-        # Download button
         with open(st.session_state.final_audio, "rb") as file:
             btn = st.download_button(
                 label="Download Audio",
@@ -871,25 +583,19 @@ elif st.session_state.current_step == 4:
                 mime="audio/mp3"
             )
         
-        # Individual character audio clips
         st.subheader("Individual Character Clips")
         for audio_entry in st.session_state.audio_files:
             with st.expander(f"{audio_entry['character']}: {audio_entry['dialogue'][:50]}..."):
                 st.audio(audio_entry['file_path'])
         
-        # Feedback section
         st.subheader("Provide Feedback")
         feedback = st.text_area("How was your experience? Any suggestions for improvement?")
         if st.button("Submit Feedback"):
-            # Here you would typically save the feedback to a database
             st.success("Thank you for your feedback!")
             
-        # Start over button
         if st.button("Start New Project"):
-            # Reset session state
             st.session_state.parsed_data = []
             st.session_state.character_voices = {}
-            st.session_state.audio_files = []
             st.session_state.audio_files = []
             st.session_state.final_audio = None
             st.session_state.voice_settings = {}
