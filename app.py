@@ -1,3 +1,174 @@
+# Define enhanced CSS
+enhanced_css = """
+<style>
+    /* Global Theme */
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+        background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);
+        border-radius: 1rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    }
+    
+    /* Typography */
+    .main-header {
+        font-size: 3.2rem;
+        font-weight: 800;
+        background: linear-gradient(120deg, #19A7CE 0%, #146C94 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-align: center;
+        margin-bottom: 0.5rem;
+        letter-spacing: -0.5px;
+        animation: fadeIn 1.2s ease-in-out;
+    }
+    
+    .sub-header {
+        font-size: 1.5rem;
+        color: #146C94;
+        margin-bottom: 2.5rem;
+        text-align: center;
+        font-weight: 400;
+        opacity: 0.9;
+        animation: slideUp 1s ease-in-out;
+    }
+    
+    /* Buttons */
+    .stButton>button {
+        background: linear-gradient(120deg, #19A7CE 0%, #146C94 100%);
+        color: white;
+        border: none;
+        border-radius: 0.5rem;
+        padding: 0.6rem 1.2rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 10px rgba(25, 167, 206, 0.2);
+    }
+    
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 15px rgba(25, 167, 206, 0.3);
+    }
+    
+    .stButton>button:active {
+        transform: translateY(1px);
+    }
+    
+    /* Input Fields */
+    .api-input {
+        margin-top: 1.2rem;
+        margin-bottom: 1.2rem;
+        padding: 1.5rem;
+        background-color: rgba(255, 255, 255, 0.8);
+        border-radius: 0.8rem;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        border-left: 4px solid #19A7CE;
+        transition: all 0.3s ease;
+    }
+    
+    .api-input:hover {
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+        background-color: rgba(255, 255, 255, 0.95);
+    }
+    
+    /* Section Styling */
+    .css-1r6slb0, .css-1inwz65 {
+        border-radius: 0.8rem;
+        border: 1px solid rgba(25, 167, 206, 0.2);
+        background-color: rgba(255, 255, 255, 0.8);
+        padding: 1.2rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        transition: all 0.3s ease;
+    }
+    
+    /* Sidebar Styling */
+    .css-1d391kg, .css-163ttbj {
+        background-color: #f0f7fa;
+        border-right: 1px solid rgba(25, 167, 206, 0.2);
+    }
+    
+    /* Audio Player */
+    audio {
+        width: 100%;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        background: #146C94;
+    }
+    
+    /* Animations */
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    
+    @keyframes slideUp {
+        from { 
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to { 
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    /* Expanders and Selectboxes */
+    .streamlit-expanderHeader, .stSelectbox > div > div {
+        background-color: rgba(255, 255, 255, 0.7);
+        border-radius: 0.5rem;
+        border: 1px solid rgba(25, 167, 206, 0.2);
+        transition: all 0.3s ease;
+    }
+    
+    .streamlit-expanderHeader:hover, .stSelectbox > div > div:hover {
+        background-color: rgba(255, 255, 255, 0.9);
+        border-color: rgba(25, 167, 206, 0.4);
+    }
+    
+    /* Text Area */
+    .stTextArea > div > div {
+        border-radius: 0.5rem;
+        border: 1px solid rgba(25, 167, 206, 0.3);
+        box-shadow: 0 1px 5px rgba(0, 0, 0, 0.03);
+    }
+    
+    .stTextArea > div > div:focus-within {
+        border-color: #19A7CE;
+        box-shadow: 0 0 0 1px #19A7CE;
+    }
+    
+    /* Dataframe/Table Styling */
+    .dataframe {
+        border-radius: 0.5rem;
+        overflow: hidden;
+        border: none !important;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    }
+    
+    .dataframe th {
+        background-color: #19A7CE !important;
+        color: white !important;
+        font-weight: 600;
+        padding: 0.75rem 1rem !important;
+    }
+    
+    .dataframe td {
+        padding: 0.6rem 1rem !important;
+        border-bottom: 1px solid #f0f2f6;
+        background-color: white;
+    }
+    
+    .dataframe tr:nth-child(even) td {
+        background-color: #f9fafc;
+    }
+    
+    /* Tooltips */
+    .stTooltipIcon {
+        color: #19A7CE !important;
+    }
+</style>
+"""
 import streamlit as st
 import re
 import tempfile
@@ -29,33 +200,8 @@ st.set_page_config(
     page_icon="🎙️",
     layout="wide"
 )
-
-# Custom CSS
-st.markdown("""
-<style>
-    .main-header {
-        font-size: 2.5rem;
-        color: #19A7CE;
-        text-align: center;
-    }
-    .sub-header {
-        font-size: 1.5rem;
-        color: #146C94;
-        margin-bottom: 2rem;
-    }
-    .stButton>button {
-        background-color: #19A7CE;
-        color: white;
-    }
-    .api-input {
-        margin-top: 1rem;
-        margin-bottom: 1rem;
-        padding: 1rem;
-        background-color: #f0f2f6;
-        border-radius: 0.5rem;
-    }
-</style>
-""", unsafe_allow_html=True)
+# Apply enhanced CSS
+st.markdown(enhanced_css, unsafe_allow_html=True)
 
 # Initialize session state variables
 if 'parsed_data' not in st.session_state:
