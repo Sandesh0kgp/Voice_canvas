@@ -448,19 +448,17 @@ if 'background_track' not in st.session_state:
 if 'bg_volume' not in st.session_state:
     st.session_state.bg_volume = 0.3
 if 'elevenlabs_key' not in st.session_state:
-    st.session_state.elevenlabs_key = ""  # Initialize as empty, user will provide
+    st.session_state.elevenlabs_key = "sk_52ac7a1f66a90f04186d0e677e526f3ddaffc3eef20cc796"
 if 'elevenlabs_voice_models' not in st.session_state:
     st.session_state.elevenlabs_voice_models = {}  # Initialize as an empty dictionary
 if 'elevenlabs_voice_name' not in st.session_state:
-    st.session_state.elevenlabs_voice_name = ""  # Will be set when voices are fetched
+    st.session_state.elevenlabs_voice_name = "Stygian Great White Shark"
 if 'openai_key' not in st.session_state:
-    st.session_state.openai_key = os.environ.get("OPENAI_API_KEY", "")  # Get from env or empty
-if 'groq_key' not in st.session_state:
-    st.session_state.groq_key = os.environ.get("GROQ_API_KEY", "")  # Get from env or empty
+    st.session_state.openai_key = os.environ.get("OPENAI_API_KEY")
 if 'deepdub_key' not in st.session_state:
-    st.session_state.deepdub_key = ""  # Initialize as empty, user will provide
+    st.session_state.deepdub_key = "dd-Rn71rk7wpT8XcrBXqvoyqoku5W6ZBMLm39a70bb4"
 if 'deepdub_email' not in st.session_state:
-    st.session_state.deepdub_email = ""  # Initialize as empty, user will provide
+    st.session_state.deepdub_email = "sandeshpatil0604@gmail.com"
 if 'openai_voice' not in st.session_state:
     st.session_state.openai_voice = "alloy"
 if 'dubbed_audio' not in st.session_state:
@@ -508,14 +506,8 @@ def get_openai_client():
     
 # Function to initialize Groq client
 def get_groq_client():
-    # First check session state for the API key
-    if 'groq_key' in st.session_state and st.session_state.groq_key:
-        return groq.Client(api_key=st.session_state.groq_key)
-    # Then check environment variables
     groq_api_key = os.environ.get("GROQ_API_KEY")
     if groq_api_key:
-        # Store in session state for future use
-        st.session_state.groq_key = groq_api_key
         return groq.Client(api_key=groq_api_key)
     return None
     
@@ -1355,7 +1347,7 @@ def main():
             # API provider selection
             api_provider = st.selectbox(
                 "Select API Provider",
-                ["OpenAI TTS", "ElevenLabs", "Groq", "DeepDub"]
+                ["OpenAI TTS", "ElevenLabs"]
             )
             
             # API key input
@@ -1378,7 +1370,7 @@ def main():
                 if elevenlabs_key:
                     st.session_state.elevenlabs_key = elevenlabs_key
                     st.success("ElevenLabs API key set successfully!")
-                
+                    
                 # Fetch ElevenLabs voices
                 if st.button("Fetch ElevenLabs Voices"):
                     with st.spinner("Fetching voices from ElevenLabs..."):
@@ -1388,35 +1380,6 @@ def main():
                             st.success(f"Successfully fetched {len(voices)} voices from ElevenLabs!")
                         else:
                             st.error("Failed to fetch voices from ElevenLabs.")
-                    
-            elif api_provider == "Groq":
-                groq_key = st.text_input(
-                    "Enter your Groq API key",
-                    value=st.session_state.groq_key if st.session_state.groq_key else "",
-                    type="password",
-                    help="Groq API key is used for text-to-dialogue conversion functionality."
-                )
-                if groq_key:
-                    st.session_state.groq_key = groq_key
-                    st.success("Groq API key set successfully!")
-                    
-            elif api_provider == "DeepDub":
-                col1, col2 = st.columns(2)
-                with col1:
-                    deepdub_key = st.text_input(
-                        "Enter your DeepDub API key",
-                        value=st.session_state.deepdub_key if st.session_state.deepdub_key else "",
-                        type="password"
-                    )
-                with col2:
-                    deepdub_email = st.text_input(
-                        "Enter your DeepDub email",
-                        value=st.session_state.deepdub_email if st.session_state.deepdub_email else ""
-                    )
-                if deepdub_key and deepdub_email:
-                    st.session_state.deepdub_key = deepdub_key
-                    st.session_state.deepdub_email = deepdub_email
-                    st.success("DeepDub credentials set successfully!")
             
         # Progress steps display
         st.markdown("""
