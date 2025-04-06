@@ -1,20 +1,28 @@
 # Define enhanced CSS
 enhanced_css = """
 <style>
+    /* Import Google Fonts */
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap');
+    
     /* Global Theme */
     .main .block-container {
         padding-top: 2rem;
         padding-bottom: 2rem;
-        background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);
-        border-radius: 1rem;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        background: linear-gradient(135deg, #f8f9ff 0%, #edf1f9 100%);
+        border-radius: 1.2rem;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.06);
+        font-family: 'Poppins', sans-serif;
     }
     
     /* Typography */
+    h1, h2, h3, h4, h5, h6 {
+        font-family: 'Montserrat', sans-serif;
+    }
+    
     .main-header {
-        font-size: 3.2rem;
+        font-size: 3.4rem;
         font-weight: 800;
-        background: linear-gradient(120deg, #19A7CE 0%, #146C94 100%);
+        background: linear-gradient(120deg, #6C63FF 0%, #FF6584 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         text-align: center;
@@ -24,30 +32,33 @@ enhanced_css = """
     }
     
     .sub-header {
-        font-size: 1.5rem;
-        color: #146C94;
+        font-size: 1.6rem;
+        background: linear-gradient(120deg, #4F46E5 0%, #8B5CF6 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         margin-bottom: 2.5rem;
         text-align: center;
-        font-weight: 400;
-        opacity: 0.9;
+        font-weight: 500;
         animation: slideUp 1s ease-in-out;
     }
     
     /* Buttons */
     .stButton>button {
-        background: linear-gradient(120deg, #19A7CE 0%, #146C94 100%);
+        background: linear-gradient(120deg, #6C63FF 0%, #8B5CF6 100%);
         color: white;
         border: none;
-        border-radius: 0.5rem;
-        padding: 0.6rem 1.2rem;
+        border-radius: 0.6rem;
+        padding: 0.7rem 1.4rem;
         font-weight: 600;
         transition: all 0.3s ease;
-        box-shadow: 0 4px 10px rgba(25, 167, 206, 0.2);
+        box-shadow: 0 4px 12px rgba(108, 99, 255, 0.25);
+        font-family: 'Montserrat', sans-serif;
     }
     
     .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 15px rgba(25, 167, 206, 0.3);
+        transform: translateY(-3px);
+        box-shadow: 0 8px 18px rgba(108, 99, 255, 0.3);
+        background: linear-gradient(120deg, #7C73FF 0%, #9B6CF6 100%);
     }
     
     .stButton>button:active {
@@ -59,41 +70,42 @@ enhanced_css = """
         margin-top: 1.2rem;
         margin-bottom: 1.2rem;
         padding: 1.5rem;
-        background-color: rgba(255, 255, 255, 0.8);
+        background-color: rgba(255, 255, 255, 0.85);
         border-radius: 0.8rem;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-        border-left: 4px solid #19A7CE;
+        box-shadow: 0 3px 12px rgba(0, 0, 0, 0.06);
+        border-left: 5px solid #6C63FF;
         transition: all 0.3s ease;
     }
     
     .api-input:hover {
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+        box-shadow: 0 5px 18px rgba(0, 0, 0, 0.08);
         background-color: rgba(255, 255, 255, 0.95);
+        transform: translateY(-2px);
     }
     
     /* Section Styling */
     .css-1r6slb0, .css-1inwz65 {
-        border-radius: 0.8rem;
-        border: 1px solid rgba(25, 167, 206, 0.2);
-        background-color: rgba(255, 255, 255, 0.8);
-        padding: 1.2rem;
-        margin-bottom: 1.5rem;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        border-radius: 0.9rem;
+        border: 1px solid rgba(108, 99, 255, 0.15);
+        background-color: rgba(255, 255, 255, 0.85);
+        padding: 1.4rem;
+        margin-bottom: 1.8rem;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05);
         transition: all 0.3s ease;
     }
     
     /* Sidebar Styling */
     .css-1d391kg, .css-163ttbj {
-        background-color: #f0f7fa;
-        border-right: 1px solid rgba(25, 167, 206, 0.2);
+        background: linear-gradient(180deg, #f5f7ff 0%, #e8ecff 100%);
+        border-right: 1px solid rgba(108, 99, 255, 0.15);
     }
     
     /* Audio Player */
     audio {
         width: 100%;
-        border-radius: 8px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        background: #146C94;
+        border-radius: 10px;
+        box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12);
+        background: linear-gradient(90deg, #6C63FF 0%, #8B5CF6 100%);
     }
     
     /* Animations */
@@ -105,7 +117,7 @@ enhanced_css = """
     @keyframes slideUp {
         from { 
             opacity: 0;
-            transform: translateY(20px);
+            transform: translateY(25px);
         }
         to { 
             opacity: 1;
@@ -113,48 +125,60 @@ enhanced_css = """
         }
     }
     
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+    }
+    
     /* Expanders and Selectboxes */
     .streamlit-expanderHeader, .stSelectbox > div > div {
-        background-color: rgba(255, 255, 255, 0.7);
-        border-radius: 0.5rem;
-        border: 1px solid rgba(25, 167, 206, 0.2);
+        background-color: rgba(255, 255, 255, 0.8);
+        border-radius: 0.7rem;
+        border: 1px solid rgba(108, 99, 255, 0.2);
         transition: all 0.3s ease;
+        font-family: 'Montserrat', sans-serif;
     }
     
     .streamlit-expanderHeader:hover, .stSelectbox > div > div:hover {
-        background-color: rgba(255, 255, 255, 0.9);
-        border-color: rgba(25, 167, 206, 0.4);
+        background-color: rgba(255, 255, 255, 0.95);
+        border-color: rgba(108, 99, 255, 0.4);
+        transform: translateY(-1px);
     }
     
     /* Text Area */
     .stTextArea > div > div {
-        border-radius: 0.5rem;
-        border: 1px solid rgba(25, 167, 206, 0.3);
-        box-shadow: 0 1px 5px rgba(0, 0, 0, 0.03);
+        border-radius: 0.7rem;
+        border: 1px solid rgba(108, 99, 255, 0.25);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        font-family: 'Poppins', sans-serif;
+        transition: all 0.3s ease;
     }
     
     .stTextArea > div > div:focus-within {
-        border-color: #19A7CE;
-        box-shadow: 0 0 0 1px #19A7CE;
+        border-color: #6C63FF;
+        box-shadow: 0 0 0 2px rgba(108, 99, 255, 0.25);
+        transform: translateY(-2px);
     }
     
     /* Dataframe/Table Styling */
     .dataframe {
-        border-radius: 0.5rem;
+        border-radius: 0.7rem;
         overflow: hidden;
         border: none !important;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        box-shadow: 0 3px 12px rgba(0, 0, 0, 0.07);
+        font-family: 'Poppins', sans-serif;
     }
     
     .dataframe th {
-        background-color: #19A7CE !important;
+        background: linear-gradient(90deg, #6C63FF 0%, #8B5CF6 100%) !important;
         color: white !important;
         font-weight: 600;
-        padding: 0.75rem 1rem !important;
+        padding: 0.8rem 1.2rem !important;
     }
     
     .dataframe td {
-        padding: 0.6rem 1rem !important;
+        padding: 0.7rem 1.2rem !important;
         border-bottom: 1px solid #f0f2f6;
         background-color: white;
     }
@@ -165,7 +189,65 @@ enhanced_css = """
     
     /* Tooltips */
     .stTooltipIcon {
-        color: #19A7CE !important;
+        color: #6C63FF !important;
+    }
+    
+    /* Audio Container */
+    .audio-container {
+        background: linear-gradient(135deg, #f9f9ff 0%, #f0f3ff 100%);
+        border-radius: 12px;
+        padding: 16px;
+        margin: 15px 0;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.06);
+        border-left: 5px solid #6C63FF;
+        transition: all 0.3s ease;
+    }
+    
+    .audio-container:hover {
+        box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+        transform: translateY(-4px);
+        background: linear-gradient(135deg, #f9f9ff 0%, #f5f8ff 100%);
+    }
+    
+    /* Progress Steps */
+    .step-container {
+        display: flex;
+        justify-content: space-between;
+        margin: 20px 0;
+        position: relative;
+    }
+    
+    .step {
+        background: #f0f3ff;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        color: #6C63FF;
+        position: relative;
+        z-index: 2;
+        transition: all 0.3s ease;
+        border: 2px solid #6C63FF;
+    }
+    
+    .step.active {
+        background: #6C63FF;
+        color: white;
+        box-shadow: 0 0 0 5px rgba(108, 99, 255, 0.2);
+        animation: pulse 2s infinite;
+    }
+    
+    .step-line {
+        position: absolute;
+        top: 20px;
+        left: 40px;
+        right: 40px;
+        height: 2px;
+        background: #e0e4f5;
+        z-index: 1;
     }
 </style>
 """
@@ -696,7 +778,6 @@ Maya (confident): Maybe I don't need to be fearless. I just need to create despi
 Mentor (proud): That, my dear, is the secret to all achievement.
 Narrator: That night, with the town's applause still echoing in her ears, Maya began her next painting with newfound purpose.
 Maya (determined): Every brushstroke is a step forward. I don't need to see the whole staircase to take the first step."""
-        
         text_input = st.text_area("Enter your script:", value=sample_text, height=300,
                                  help="Format: Character (emotion): Dialogue")
         
@@ -805,7 +886,9 @@ elif st.session_state.current_step == 2:
                     )
                     
                     if audio_file:
+                        st.markdown("<div class=\"audio-container\">", unsafe_allow_html=True)
                         st.audio(audio_file)
+                        st.markdown("</div>", unsafe_allow_html=True)
                     else:
                         st.error("Failed to generate preview audio.")
             
@@ -1012,7 +1095,9 @@ elif st.session_state.current_step == 4:
             st.info(f"Background Track: {st.session_state.background_track} (Volume: {int(st.session_state.bg_volume * 100)}%)")
         
         # Display audio player
+        st.markdown("<div class=\"audio-container\">", unsafe_allow_html=True)
         st.audio(st.session_state.final_audio)
+        st.markdown("</div>", unsafe_allow_html=True)
         
         # Download button
         with open(st.session_state.final_audio, "rb") as file:
@@ -1027,7 +1112,9 @@ elif st.session_state.current_step == 4:
         st.subheader("Individual Character Clips")
         for audio_entry in st.session_state.audio_files:
             with st.expander(f"{audio_entry['character']}: {audio_entry['dialogue'][:50]}..."):
+                st.markdown("<div class=\"audio-container\">", unsafe_allow_html=True)
                 st.audio(audio_entry['file_path'])
+                st.markdown("</div>", unsafe_allow_html=True)
         
         # Feedback section
         st.subheader("Provide Feedback")
