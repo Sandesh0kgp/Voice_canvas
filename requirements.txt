@@ -1,6 +1,8 @@
 ffmpeg-python>=0.2.0
+groq>=0.22.0
 openai>=1.70.0
 pandas>=2.2.3
 pydub>=0.25.1
 requests>=2.32.3
 streamlit>=1.44.1
+
