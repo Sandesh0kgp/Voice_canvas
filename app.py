@@ -682,10 +682,20 @@ if st.session_state.current_step == 1:
                 st.error(f"Error parsing file: {str(e)}")
     
     else:  # Direct Text Entry
-        sample_text = """Narrator: Once upon a time, in a small village, there lived a boy named Arjun.
-Arjun (happy): I want to explore the world beyond these mountains!
-Narrator: But Arjun's parents were worried about his safety.
-Parents (worried): Arjun, it's dangerous out there. Please stay home."""
+        sample_text = """Narrator: In a small town nestled between rolling hills, lived Maya, a young artist with big dreams but little confidence.
+Maya (unsure): I don't know if my paintings are good enough for the art exhibition.
+Friend (encouraging): Maya, your work is incredible! You've captured emotions that speak to people.
+Narrator: Maya stared at her canvas, brushstrokes of vibrant colors depicting a sunrise over mountains.
+Maya (worried): But what if everyone laughs? What if I'm not ready?
+Mentor (wise): The greatest masterpieces weren't created by artists who felt ready, but by those brave enough to try anyway.
+Narrator: The day of the exhibition arrived, and Maya's hands trembled as she hung her painting.
+Visitor (amazed): This painting... it's extraordinary! It makes me feel like anything is possible.
+Maya (surprised): Really? That's exactly what I wanted to convey!
+Narrator: As more people gathered around her work, Maya felt something shift inside her.
+Maya (confident): Maybe I don't need to be fearless. I just need to create despite the fear.
+Mentor (proud): That, my dear, is the secret to all achievement.
+Narrator: That night, with the town's applause still echoing in her ears, Maya began her next painting with newfound purpose.
+Maya (determined): Every brushstroke is a step forward. I don't need to see the whole staircase to take the first step."""
         
         text_input = st.text_area("Enter your script:", value=sample_text, height=300,
                                  help="Format: Character (emotion): Dialogue")
