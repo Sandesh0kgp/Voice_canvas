@@ -300,6 +300,16 @@ if 'api_key' not in st.session_state:
     st.session_state.api_key = os.environ.get("OPENAI_API_KEY")
 if 'api_provider' not in st.session_state:
     st.session_state.api_provider = "openai"
+if 'playht_key' not in st.session_state:
+    st.session_state.playht_key = "e57647dcee5a4cb2883f71dc734fe8d5"
+if 'playht_user_id' not in st.session_state:
+    st.session_state.playht_user_id = "YvUkSVjesNQqUCunaulS9XO3xM03"
+if 'playht_voice_models' not in st.session_state:
+    st.session_state.playht_voice_models = []
+if 'custom_voice_id' not in st.session_state:
+    st.session_state.custom_voice_id = None
+if 'voice_clone_status' not in st.session_state:
+    st.session_state.voice_clone_status = ""
 if 'voice_settings' not in st.session_state:
     st.session_state.voice_settings = {}
 if 'background_track' not in st.session_state:
@@ -398,6 +408,237 @@ def generate_voice_openai(text, voice_model, speed=1.0, pitch=0, emotion=None):
         st.error(f"Error generating audio: {str(e)}")
         return None
 
+# Function to get PlayHT voices
+def get_playht_voices():
+    """Get available voice models from PlayHT API."""
+    if not st.session_state.playht_key or not st.session_state.playht_user_id:
+        return []
+        
+    try:
+        # Updated endpoint to match PlayHT's documentation
+        url = "https://api.play.ht/api/v1/voices?cloned=true"
+        headers = {
+            "Accept": "application/json",
+            "Authorization": st.session_state.playht_key,
+            "X-User-ID": st.session_state.playht_user_id
+        }
+        
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code == 200:
+            # The API response might be an array directly, or nested under a key
+            result = response.json()
+            voices = result if isinstance(result, list) else result.get('voices', [])
+            
+            # Format the voices to have consistent structure with our app
+            formatted_voices = []
+            for voice in voices:
+                formatted_voice = {
+                    'id': voice.get('id'),
+                    'name': voice.get('name'),
+                    'isCloned': True,
+                    'created_at': voice.get('created_at', 'Unknown date')
+                }
+                formatted_voices.append(formatted_voice)
+            
+            return formatted_voices
+        else:
+            st.error(f"Error getting PlayHT voices: {response.status_code} - {response.text}")
+            return []
+    except Exception as e:
+        st.error(f"Error connecting to PlayHT API: {str(e)}")
+        return []
+
+# Function to create voice clone with PlayHT
+def create_playht_voice_clone(name, audio_file_path, description="My cloned voice"):
+    """Create a new voice clone using PlayHT API."""
+    if not st.session_state.playht_key or not st.session_state.playht_user_id:
+        return None
+        
+    try:
+        # Correct endpoint for voice cloning with PlayHT v1 API
+        url = "https://api.play.ht/api/v1/voices/clone/instant" 
+        headers = {
+            "Accept": "application/json",
+            "Authorization": st.session_state.playht_key,
+            "X-User-ID": st.session_state.playht_user_id
+
+        }
+        
+        # Read the audio file
+        with open(audio_file_path, 'rb') as f:
+            # Simplify filename to avoid issues with special characters
+            simple_filename = "voice_sample.mp3"
+            
+            files = {
+                'sample_file': (simple_filename, f, 'audio/mpeg')
+            }
+            
+            data = {
+                'voice_name': name,
+                'description': description
+            }
+            
+            # Add more detailed logging
+            st.write("Attempting voice clone with:", url)
+            st.write("File being uploaded:", os.path.basename(audio_file_path))
+            
+            # Make the API request with additional debugging
+            try:
+                response = requests.post(url, headers=headers, data=data, files=files)
+                st.write(f"Response status code: {response.status_code}")
+                st.write(f"Response headers: {response.headers}")
+                if response.text:
+                    st.write(f"Response content (preview): {response.text[:200]}")
+            except Exception as e:
+                st.error(f"Request error: {str(e)}")
+                return None
+            
+            if response.status_code == 200 or response.status_code == 201:
+                result = response.json()
+                voice_id = result.get('id') or result.get('voice_id')
+                
+                if voice_id:
+                    st.success(f"Voice clone created successfully with ID: {voice_id}")
+                    return voice_id
+                else:
+                    st.warning("Voice clone request accepted but no ID returned. Refreshing voices may show your new voice.")
+                    return "pending"
+            else:
+                st.error(f"Error creating voice clone: {response.status_code} - {response.text}")
+                return None
+    except Exception as e:
+        st.error(f"Error connecting to PlayHT API: {str(e)}")
+        st.error(f"Details: {str(e)}")
+        return None
+
+# Function to check voice clone status
+def check_playht_voice_clone_status(voice_id):
+    """Check the status of a voice clone process."""
+    if not st.session_state.playht_key or not st.session_state.playht_user_id:
+        return None
+    
+    # If voice_id is "pending", we just need to refresh voices
+    if voice_id == "pending":
+        # Get the updated voice list to see if the new voice appears
+        voices = get_playht_voices()
+        if voices:
+            return {"status": "completed", "id": "refresh_needed"}
+        else:
+            return {"status": "processing", "id": "pending"}
+    
+    try:
+        # First check if the voice exists in the current voice list
+        voices = get_playht_voices()
+        for voice in voices:
+            if voice.get('id') == voice_id:
+                return {"status": "completed", "id": voice_id}
+        
+        # If not found in the list, check directly with API
+        url = f"https://api.play.ht/api/v1/voice/{voice_id}"
+        headers = {
+            "Accept": "application/json",
+            "Authorization": st.session_state.playht_key,
+            "X-User-ID": st.session_state.playht_user_id
+        }
+        
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code == 200:
+            result = response.json()
+            # Check if the voice exists and is usable
+            status = "completed" if result.get("status") == "CREATION_SUCCEEDED" else "processing"
+            return {"status": status, "id": voice_id}
+        elif response.status_code == 404:
+            # Voice ID not found, but cloning might still be in progress
+            return {"status": "processing", "id": voice_id}
+        else:
+            st.error(f"Error checking voice clone status: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        st.error(f"Error connecting to PlayHT API: {str(e)}")
+        return None
+
+# Function to generate voice using PlayHT
+def generate_voice_playht(text, voice_id, speed=1.0, pitch=0, emotion=None):
+    """Generate voice audio from text using PlayHT API."""
+    if not st.session_state.playht_key or not st.session_state.playht_user_id:
+        st.error("PlayHT API key or User ID not set. Please enter your credentials.")
+        return None
+        
+    try:
+        # Updated API endpoint to match PlayHT's current API
+        url = "https://api.play.ht/api/v1/convert"
+        headers = {
+            "Accept": "application/json",
+            "Authorization": st.session_state.playht_key,
+            "X-User-ID": st.session_state.playht_user_id,
+            "Content-Type": "application/json"
+        }
+        
+        # Apply emotion through text modification if provided
+        if emotion:
+            text = f"[{emotion}] {text}"
+        
+        # Format data according to PlayHT v1 API
+        data = {
+            "content": [text],
+            "voice": voice_id,
+            "output_format": "mp3",
+            "speed": speed,
+            "sample_rate": 24000
+        }
+        
+        # Submit conversion request
+        response = requests.post(url, headers=headers, json=data)
+        
+        if response.status_code == 200 or response.status_code == 201:
+            result = response.json()
+            transcription_id = result.get('transcriptionId')
+            
+            if not transcription_id:
+                st.error("No transcription ID returned from PlayHT")
+                return None
+                
+            # Poll status endpoint until conversion is complete (with timeout)
+            status_url = f"https://api.play.ht/api/v1/articleStatus?transcriptionId={transcription_id}"
+            
+            # Poll with timeout
+            max_attempts = 15
+            for attempt in range(max_attempts):
+                time.sleep(1)  # Wait between polls
+                
+                status_response = requests.get(status_url, headers=headers)
+                if status_response.status_code != 200:
+                    continue
+                    
+                status = status_response.json()
+                
+                if status.get("converted", False):
+                    # Conversion complete
+                    audio_url = status.get("audioUrl")
+                    
+                    if audio_url:
+                        # Download the audio file
+                        audio_response = requests.get(audio_url)
+                        
+                        # Save the audio to a temporary file
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
+                            temp_file.write(audio_response.content)
+                            return temp_file.name
+                    else:
+                        st.error("No audio URL in the conversion result")
+                        return None
+            
+            st.error("Timed out waiting for PlayHT conversion")
+            return None
+        else:
+            st.error(f"Error generating audio: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        st.error(f"Error generating audio: {str(e)}")
+        return None
+
 # Function to generate voice (mock implementation as fallback)
 def generate_voice_mock(text, voice_model, speed=1.0, pitch=0, emotion=None):
     """Generate voice audio from text (mock implementation)."""
@@ -417,10 +658,29 @@ def generate_voice_mock(text, voice_model, speed=1.0, pitch=0, emotion=None):
 
 # Function to generate voice (router)
 def generate_voice(text, voice_model, speed=1.0, pitch=0, emotion=None):
-    """Route to appropriate voice generation function based on API provider."""
-    if st.session_state.api_provider == "openai" and st.session_state.api_key:
+    """Route to appropriate voice generation function based on the voice model."""
+    # Check if API keys exist
+    has_openai_key = bool(st.session_state.api_key)
+    has_playht_keys = bool(st.session_state.playht_key and st.session_state.playht_user_id)
+    
+    # Determine if the voice is an OpenAI voice or PlayHT voice
+    is_openai_voice = voice_model in openai_voice_models.values()
+    is_playht_voice = False
+    
+    if not is_openai_voice and has_playht_keys and st.session_state.playht_voice_models:
+        # Check if the ID exists in PlayHT voices
+        is_playht_voice = any(v.get('id') == voice_model for v in st.session_state.playht_voice_models)
+    
+    # Route to appropriate API
+    if is_openai_voice and has_openai_key:
         return generate_voice_openai(text, voice_model, speed, pitch, emotion)
+    elif is_playht_voice and has_playht_keys:
+        return generate_voice_playht(text, voice_model, speed, pitch, emotion)
+    elif has_openai_key:
+        # Fallback to OpenAI if keys exist but voice is unknown
+        return generate_voice_openai(text, "alloy", speed, pitch, emotion)
     else:
+        # Last resort is mock when all else fails
         return generate_voice_mock(text, voice_model, speed, pitch, emotion)
 
 # Dictionary of built-in background tracks
@@ -671,100 +931,122 @@ def combine_audio_files(audio_files, background_track=None, bg_volume=0.3):
         # Mix the audio streams
         combined = combined.overlay(bg_audio, loop=False)
     
-    # Export combined audio
-    output_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
-    combined.export(output_path, format="mp3")
-    return output_path
+    # Export combined audio to a temporary file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
+        combined.export(temp_file.name, format="mp3")
+        return temp_file.name
 
 # Function to save user preferences
 def save_user_preferences(preferences):
     """Save user preferences to a file."""
-    # In a real implementation, this would save to a database
-    # For now, we'll just print the preferences
-    print(f"Saving preferences: {preferences}")
-    return True
+    try:
+        with open("user_preferences.json", "w") as f:
+            json.dump(preferences, f)
+        return True
+    except Exception as e:
+        st.error(f"Error saving preferences: {str(e)}")
+        return False
 
-# Function to get voice settings for a character
+# Function to get voice settings
 def get_voice_settings(character):
     """Get the voice settings for a character."""
-    if character not in st.session_state.voice_settings:
-        st.session_state.voice_settings[character] = {
-            "speed": 1.0,
-            "pitch": 0.0
-        }
-    return st.session_state.voice_settings[character]
+    return st.session_state.voice_settings.get(character, {
+        "voice": list(openai_voice_models.keys())[0],
+        "speed": 1.0,
+        "pitch": 0
+    })
 
-# Function to get the voice model ID from name
+# Function to get voice model ID
 def get_voice_model_id(voice_name):
     """Get the voice model ID from the voice name."""
-    if st.session_state.api_provider == "openai":
+    # Check if it's a separator, if so return a default voice
+    if voice_name == "--- PlayHT Cloned Voices ---":
+        return "alloy"  # Default OpenAI voice as fallback
+        
+    # For OpenAI voices, return directly from the dictionary
+    if voice_name in openai_voice_models:
         return openai_voice_models.get(voice_name, "alloy")
-    else:
-        # For mock API, just return the name
-        return voice_name.lower().replace(" ", "_")
+        
+    # For PlayHT voices, search by name to find the ID
+    if st.session_state.playht_voice_models:
+        for voice in st.session_state.playht_voice_models:
+            if voice.get('name') == voice_name:
+                return voice.get('id')
+                
+    # If we can't identify it as either, return default
+    return "alloy"  # Default fallback
 
-# App header
-st.markdown("<h1 class='main-header'>VoiceCanvas</h1>", unsafe_allow_html=True)
-st.markdown("<h2 class='sub-header'>Transform Text into Character-Driven Audio</h2>", unsafe_allow_html=True)
-
-# API Key Configuration
-with st.sidebar:
-    st.title("API Configuration")
+# Main App Function
+def main():
+    # Application header
+    st.markdown("<h1 class='main-header'>VoiceCanvas</h1>", unsafe_allow_html=True)
+    st.markdown("<p class='sub-header'>Transform your scripts into immersive voice experiences</p>", unsafe_allow_html=True)
     
-    api_provider = st.radio("Select API Provider", ["OpenAI", "Mock (No API)"], index=0 if st.session_state.api_provider == "openai" else 1)
-    st.session_state.api_provider = api_provider.lower()
+    # Create tabs for different sections
+    tabs = st.tabs(["Script to Voice", "Voice Clone Studio", "Settings", "About"])
     
-    if st.session_state.api_provider == "openai":
-        api_key = st.text_input("Enter OpenAI API Key", type="password", value=st.session_state.api_key if st.session_state.api_key else "")
-        if api_key:
-            st.session_state.api_key = api_key
-            st.success("API Key set successfully!")
-        else:
-            st.warning("Please enter your OpenAI API key to use voice generation.")
-    
-    st.markdown("---")
-    st.title("Navigation")
-    step = st.radio(
-        "Process Steps",
-        ["1. Text Input", "2. Character Mapping", "3. Voice Generation", "4. Audio Output"],
-        index=st.session_state.current_step - 1
-    )
-    
-    # Update current step based on selection
-    st.session_state.current_step = int(step[0])
-
-# Step 1: Text Input
-if st.session_state.current_step == 1:
-    st.header("Step 1: Upload or Enter Your Text")
-    
-    input_method = st.radio("Choose input method:", ["Upload File", "Direct Text Entry"])
-    
-    if input_method == "Upload File":
-        uploaded_file = st.file_uploader("Upload your script or story file", type=['txt'])
-        if uploaded_file is not None:
-            try:
-                st.session_state.parsed_data = parse_text_from_file(uploaded_file)
-                st.success(f"Successfully parsed {len(st.session_state.parsed_data)} dialogue entries!")
+    # Script to Voice Tab
+    with tabs[0]:
+        st.header("Script to Voice Converter")
+        st.write("Enter your script text or upload a file to generate voice audio with different characters.")
+        
+        # Steps indicator for visual progress tracking
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            step1_class = "active" if st.session_state.current_step == 1 else ""
+            st.markdown(f"<div class='step {step1_class}'>1</div>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align:center;'>Input Text</p>", unsafe_allow_html=True)
+            
+        with col2:
+            step2_class = "active" if st.session_state.current_step == 2 else ""
+            st.markdown(f"<div class='step {step2_class}'>2</div>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align:center;'>Assign Voices</p>", unsafe_allow_html=True)
+            
+        with col3:
+            step3_class = "active" if st.session_state.current_step == 3 else ""
+            st.markdown(f"<div class='step {step3_class}'>3</div>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align:center;'>Generate Audio</p>", unsafe_allow_html=True)
+        
+        st.markdown("<div class='step-line'></div>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # STEP 1: Input Text
+        if st.session_state.current_step == 1:
+            # Input method selection
+            input_method = st.radio("Select input method:", ["Direct Text Entry", "Upload File"], horizontal=True)
+            
+            if input_method == "Upload File":
+                # File uploader
+                uploaded_file = st.file_uploader("Upload script file:", type=["txt", "md"])
                 
-                # Display parsed data
-                st.subheader("Preview:")
-                for i, entry in enumerate(st.session_state.parsed_data[:5]):
-                    emotion_text = f" ({entry['emotion']})" if entry['emotion'] else ""
-                    st.text(f"{entry['character']}{emotion_text}: {entry['dialogue'][:50]}...")
+                if uploaded_file:
+                    try:
+                        st.session_state.parsed_data = parse_text_from_file(uploaded_file)
+                        
+                        # Display parsed data
+                        st.subheader("Preview:")
+                        for item in st.session_state.parsed_data[:5]:  # Preview first 5 lines
+                            emotion_text = f" ({item['emotion']})" if item['emotion'] else ""
+                            st.write(f"**{item['character']}{emotion_text}:** {item['dialogue']}")
+                        
+                        if len(st.session_state.parsed_data) > 5:
+                            st.write(f"... and {len(st.session_state.parsed_data) - 5} more lines")
+                            
+                        # Add message about continuing
+                        st.write("")  # Spacing
+                        st.write("When you're ready to assign voices to characters:")
+                    except Exception as e:
+                        st.error(f"Error parsing file: {str(e)}")
                 
-                if len(st.session_state.parsed_data) > 5:
-                    st.text(f"... and {len(st.session_state.parsed_data) - 5} more entries")
-                
-                # Continue button
-                if st.button("Continue to Character Mapping"):
-                    st.session_state.current_step = 2
-                    st.rerun()
-                
-            except Exception as e:
-                st.error(f"Error parsing file: {str(e)}")
-    
-    else:  # Direct Text Entry
-        sample_text = """Narrator: In a small town nestled between rolling hills, lived Maya, a young artist with big dreams but little confidence.
+                # Continue button always shown when data is parsed from file
+                if st.session_state.parsed_data and input_method == "Upload File":
+                    if st.button("Continue to Voice Assignment", key="continue_file_upload"):
+                        st.session_state.current_step = 2
+                        st.rerun()
+            
+            else:  # Direct Text Entry
+                sample_text = """Narrator: In a small town nestled between rolling hills, lived Maya, a young artist with big dreams but little confidence.
 Maya (unsure): I don't know if my paintings are good enough for the art exhibition.
 Friend (encouraging): Maya, your work is incredible! You've captured emotions that speak to people.
 Narrator: Maya stared at her canvas, brushstrokes of vibrant colors depicting a sunrise over mountains.
@@ -778,363 +1060,628 @@ Maya (confident): Maybe I don't need to be fearless. I just need to create despi
 Mentor (proud): That, my dear, is the secret to all achievement.
 Narrator: That night, with the town's applause still echoing in her ears, Maya began her next painting with newfound purpose.
 Maya (determined): Every brushstroke is a step forward. I don't need to see the whole staircase to take the first step."""
-        text_input = st.text_area("Enter your script:", value=sample_text, height=300,
+                text_input = st.text_area("Enter your script:", value=sample_text, height=300,
                                  help="Format: Character (emotion): Dialogue")
+                
+                if st.button("Parse Text"):
+                    if text_input.strip():
+                        st.session_state.parsed_data = parse_text_from_string(text_input)
+                        
+                        # Display parsed data
+                        st.subheader("Parsed Result:")
+                        for item in st.session_state.parsed_data[:5]:  # Preview first 5 lines
+                            emotion_text = f" ({item['emotion']})" if item['emotion'] else ""
+                            st.write(f"**{item['character']}{emotion_text}:** {item['dialogue']}")
+                        
+                        if len(st.session_state.parsed_data) > 5:
+                            st.write(f"... and {len(st.session_state.parsed_data) - 5} more lines")
+                        
+                        # Add a "Continue" button outside of the if statement
+                        st.write("") # Add some spacing
+                        st.write("When you're ready to assign voices to characters:")
+                    else:
+                        st.error("Please enter some text before parsing.")
+                
+                # Continue button always shown when data is parsed, with unique key
+                if st.session_state.parsed_data:
+                    if st.button("Continue to Voice Assignment", key="continue_text_input"):
+                        st.session_state.current_step = 2
+                        st.rerun()
         
-        if st.button("Parse Text"):
-            try:
-                st.session_state.parsed_data = parse_text_from_string(text_input)
-                st.success(f"Successfully parsed {len(st.session_state.parsed_data)} dialogue entries!")
-                
-                # Display parsed data
-                st.subheader("Preview:")
-                for entry in st.session_state.parsed_data:
-                    emotion_text = f" ({entry['emotion']})" if entry['emotion'] else ""
-                    st.text(f"{entry['character']}{emotion_text}: {entry['dialogue'][:50]}...")
-                
-                # Continue button
-                if st.button("Continue to Character Mapping"):
-                    st.session_state.current_step = 2
-                    st.rerun()
+        # STEP 2: Voice Assignment
+        elif st.session_state.current_step == 2:
+            st.subheader("Assign Voices to Characters")
+            
+            # Get unique characters
+            unique_characters = set(item["character"] for item in st.session_state.parsed_data)
+            
+            # Initialize voice settings if not already set
+            for character in unique_characters:
+                if character not in st.session_state.voice_settings:
+                    st.session_state.voice_settings[character] = {
+                        "voice": list(openai_voice_models.keys())[0],
+                        "speed": 1.0,
+                        "pitch": 0
+                    }
+            
+            # Display voice settings for each character
+            st.write("Customize voice settings for each character:")
+            
+            # Voice assignment widgets
+            for character in unique_characters:
+                with st.expander(f"**{character}**", expanded=(character == list(unique_characters)[0])):
+                    col1, col2 = st.columns(2)
                     
-            except Exception as e:
-                st.error(f"Error parsing text: {str(e)}")
-
-# Step 2: Character Mapping
-elif st.session_state.current_step == 2:
-    st.header("Step 2: Map Characters to Voices")
-    
-    if not st.session_state.parsed_data:
-        st.warning("Please upload or enter your text first!")
-        if st.button("Go Back to Text Input"):
-            st.session_state.current_step = 1
-            st.rerun()
-    else:
-        # Get unique characters
-        characters = list(set([entry['character'] for entry in st.session_state.parsed_data]))
-        
-        st.subheader("Assign voices to characters")
-        
-        # Select voice models based on API provider
-        voice_models_to_use = openai_voice_models if st.session_state.api_provider == "openai" else {
-            "Neutral Narrator": "neutral_narrator",
-            "Young Male": "young_male",
-            "Young Female": "young_female",
-            "Elder Male": "elder_male",
-            "Elder Female": "elder_female",
-            "Child": "child",
-            "Villain": "villain",
-            "Hero": "hero",
-            "Comic Relief": "comic_relief"
-        }
-        
-        # Create a form for character mapping
-        with st.form("character_mapping_form"):
-            for character in characters:
-                col1, col2 = st.columns([3, 1])
-                
-                with col1:
-                    voice_selection = st.selectbox(
-                        f"Voice for {character}:",
-                        options=list(voice_models_to_use.keys()),
-                        key=f"voice_{character}",
-                        index=0
-                    )
-                    st.session_state.character_voices[character] = voice_selection
-                
-                with col2:
-                    # Advanced settings expander
-                    with st.expander("Voice Settings"):
-                        settings = get_voice_settings(character)
-                        settings["speed"] = st.slider(
-                            "Speed:", 
-                            min_value=0.5, 
-                            max_value=2.0,
-                            value=settings.get("speed", 1.0),
+                    # Get current settings for this character
+                    current_settings = st.session_state.voice_settings.get(character, {
+                        "voice": list(openai_voice_models.keys())[0],
+                        "speed": 1.0,
+                        "pitch": 0
+                    })
+                    
+                    # Voice selection based on API provider
+                    voice_options = []
+                    
+                    # Always include OpenAI voices
+                    voice_options = list(openai_voice_models.keys())
+                    
+                    # Add PlayHT voices if available
+                    if st.session_state.playht_voice_models:
+                        # Add a separator
+                        if voice_options:
+                            voice_options.append("--- PlayHT Cloned Voices ---")
+                        
+                        # Add all PlayHT voices
+                        for v in st.session_state.playht_voice_models:
+                            voice_name = v.get('name', v.get('id', 'Unknown'))
+                            if voice_name not in voice_options:
+                                voice_options.append(voice_name)
+                    
+                    with col1:
+                        voice = st.selectbox(
+                            f"Voice for {character}:",
+                            options=voice_options,
+                            index=voice_options.index(current_settings["voice"]) if current_settings["voice"] in voice_options else 0,
+                            key=f"voice_{character}"
+                        )
+                    
+                    with col2:
+                        speed = st.slider(
+                            f"Speed for {character}:",
+                            min_value=0.5,
+                            max_value=1.5,
+                            value=current_settings["speed"],
                             step=0.1,
                             key=f"speed_{character}"
                         )
-                        
-                        # Store the updated settings
-                        st.session_state.voice_settings[character] = settings
-            
-            submit_button = st.form_submit_button("Save Voice Mappings")
-        
-        if submit_button:
-            st.success("Voice mappings saved successfully!")
-            
-            # Show a preview button for testing
-            if st.button("Preview a Random Line"):
-                # Select a random entry
-                import random
-                entry = random.choice(st.session_state.parsed_data)
-                
-                # Get voice model for this character
-                voice_name = st.session_state.character_voices.get(entry["character"], list(voice_models_to_use.keys())[0])
-                voice_model = get_voice_model_id(voice_name)
-                
-                # Get voice settings
-                settings = get_voice_settings(entry["character"])
-                
-                # Generate preview audio
-                with st.spinner(f"Generating preview for '{entry['character']}'..."):
-                    audio_file = generate_voice(
-                        entry["dialogue"],
-                        voice_model,
-                        speed=settings["speed"],
-                        emotion=entry["emotion"]
-                    )
                     
-                    if audio_file:
-                        st.markdown("<div class=\"audio-container\">", unsafe_allow_html=True)
-                        st.audio(audio_file)
-                        st.markdown("</div>", unsafe_allow_html=True)
-                    else:
-                        st.error("Failed to generate preview audio.")
+                    # Update settings in session state
+                    st.session_state.voice_settings[character] = {
+                        "voice": voice,
+                        "speed": speed,
+                        "pitch": 0  # Pitch is not directly supported in OpenAI TTS, kept for future compatibility
+                    }
+                    
+                    # Test button for this character
+                    test_text = next((item["dialogue"] for item in st.session_state.parsed_data 
+                                    if item["character"] == character), "Testing voice.")
+                    
+                    if st.button(f"Test Voice for {character}", key=f"test_{character}"):
+                        if st.session_state.api_provider == "openai" and not st.session_state.api_key:
+                            st.error("Please set your OpenAI API key in the Settings tab.")
+                        elif st.session_state.api_provider == "playht" and (not st.session_state.playht_key or not st.session_state.playht_user_id):
+                            st.error("Please set your PlayHT API credentials in the Settings tab.")
+                        else:
+                            # Get the first dialogue for this character to test
+                            emotion = next((item["emotion"] for item in st.session_state.parsed_data 
+                                        if item["character"] == character and item["emotion"]), None)
+                            
+                            voice_model = get_voice_model_id(voice)
+                            
+                            with st.spinner(f"Generating test audio for {character}..."):
+                                audio_file = generate_voice(
+                                    test_text,
+                                    voice_model,
+                                    speed,
+                                    0,
+                                    emotion
+                                )
+                                
+                                if audio_file:
+                                    st.audio(audio_file)
+                                else:
+                                    st.error("Failed to generate test audio.")
             
-            # Continue button
-            if st.button("Continue to Voice Generation"):
-                # Move to next step
-                st.session_state.current_step = 3
-                st.rerun()
-
-# Step 3: Voice Generation
-elif st.session_state.current_step == 3:
-    st.header("Step 3: Generate Character Voices")
-    
-    if not st.session_state.parsed_data or not st.session_state.character_voices:
-        st.warning("Please map characters to voices first!")
-        if st.button("Go Back to Character Mapping"):
-            st.session_state.current_step = 2
-            st.rerun()
-    else:
-        # API warning if needed
-        if st.session_state.api_provider == "openai" and not st.session_state.api_key:
-            st.warning("⚠️ No OpenAI API key provided. Using mock audio generation instead. For real voice generation, please add your API key in the sidebar.")
-        
-        # Select voice models based on API provider
-        voice_models_to_use = openai_voice_models if st.session_state.api_provider == "openai" else {
-            "Neutral Narrator": "neutral_narrator",
-            "Young Male": "young_male",
-            "Young Female": "young_female",
-            "Elder Male": "elder_male",
-            "Elder Female": "elder_female",
-            "Child": "child",
-            "Villain": "villain",
-            "Hero": "hero",
-            "Comic Relief": "comic_relief"
-        }
-        
-        # Voice customization options
-        st.subheader("Voice Customization (Optional)")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            speed = st.slider("Speech Speed:", min_value=0.5, max_value=2.0, value=1.0, step=0.1)
-        with col2:
-            pitch = st.slider("Voice Pitch:", min_value=-20, max_value=20, value=0, step=5)
-            
-        # Background music selection
-        st.subheader("Background Music (Optional)")
-        st.markdown("🎵 Add ambient sounds or music to enhance your audio story and create an immersive atmosphere.")
-        
-        # Create a card-like interface for track selection
-        track_container = st.container()
-        with track_container:
+            # Background music selection
+            st.subheader("Background Music")
             col1, col2 = st.columns(2)
             
             with col1:
-                # Background track selection with better descriptions
-                track_descriptions = {
-                    "None": "No background audio",
-                    "Peaceful Nature": "Gentle ambient sounds of a forest with occasional bird chirps",
-                    "Sci-Fi Ambience": "Futuristic electronic tones and subtle beeps",
-                    "Suspenseful Mystery": "Tense atmospheric sounds with occasional startling elements",
-                    "Fantasy Adventure": "Mystical ambient sounds with magical chimes",
-                    "Urban City": "City atmosphere with distant traffic and occasional street sounds",
-                    "Romantic Scene": "Soft, gentle ambient tones for emotional moments",
-                    "Horror Ambience": "Dark, unsettling sounds with occasional suspenseful elements",
-                    "Comedy Background": "Light, playful ambient sounds for humorous scenes"
-                }
-                
                 background_track = st.selectbox(
-                    "Select Background Track:",
+                    "Select background music:",
                     options=list(BACKGROUND_TRACKS.keys()),
-                    index=list(BACKGROUND_TRACKS.keys()).index(st.session_state.background_track) if st.session_state.background_track in BACKGROUND_TRACKS else 0,
-                    format_func=lambda x: x  # Just show the name in the dropdown
+                    index=list(BACKGROUND_TRACKS.keys()).index(st.session_state.background_track) if st.session_state.background_track in BACKGROUND_TRACKS else 0
                 )
                 st.session_state.background_track = background_track
                 
-                # Show description of selected track
-                if background_track != "None":
-                    st.info(track_descriptions.get(background_track, ""))
-            
             with col2:
-                bg_volume = st.slider(
-                    "Background Volume:", 
-                    min_value=0.1, 
-                    max_value=0.5, 
-                    value=st.session_state.bg_volume,
-                    step=0.05,
-                    format="%d%%",  # Format as percentage
-                    help="Higher values make background sounds louder relative to voices."
-                )
-                st.session_state.bg_volume = bg_volume
-                
-                # Show a visual indicator of the volume level
-                vol_percent = int(bg_volume * 100)
-                if vol_percent < 20:
-                    st.caption("🔈 Subtle background (recommended for dialogue-heavy content)")
-                elif vol_percent < 35:
-                    st.caption("🔉 Balanced mix of speech and background")
-                else:
-                    st.caption("🔊 Prominent background (good for atmospheric scenes)")
+                if background_track != "None":
+                    bg_volume = st.slider(
+                        "Background volume:",
+                        min_value=0.1,
+                        max_value=0.9,
+                        value=st.session_state.bg_volume,
+                        step=0.1
+                    )
+                    st.session_state.bg_volume = bg_volume
+            
+            # Navigation buttons
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Back to Text Input"):
+                    st.session_state.current_step = 1
+                    st.rerun()
                     
-        # Reset button for background settings
-        if st.button("Reset Background Settings"):
-            st.session_state.background_track = "None"
-            st.session_state.bg_volume = 0.3
-            st.rerun()
+            with col2:
+                if st.button("Continue to Audio Generation"):
+                    st.session_state.current_step = 3
+                    st.rerun()
         
-        # Generate button
-        if st.button("Generate Audio"):
-            # Clear previous audio files
-            st.session_state.audio_files = []
+        # STEP 3: Generate Audio
+        elif st.session_state.current_step == 3:
+            st.subheader("Generate Audio")
             
-            # Show progress
-            progress_container = st.container()
-            with progress_container:
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                character_info = st.empty()
-                dialogue_preview = st.empty()
+            # Summary of settings
+            st.write("Here's a summary of your settings:")
             
-            # Process each dialogue entry
-            for i, entry in enumerate(st.session_state.parsed_data):
-                character = entry['character']
-                emotion_text = f" ({entry['emotion']})" if entry['emotion'] else ""
-                dialogue = entry['dialogue']
+            # Display unique characters and their voice settings
+            unique_characters = set(item["character"] for item in st.session_state.parsed_data)
+            
+            for character in unique_characters:
+                settings = st.session_state.voice_settings.get(character, {
+                    "voice": list(openai_voice_models.keys())[0],
+                    "speed": 1.0,
+                    "pitch": 0
+                })
                 
-                # Update status display
-                status_text.markdown(f"**Generating audio...** ({i+1}/{len(st.session_state.parsed_data)})")
-                character_info.markdown(f"🎭 **Character:** {character}{emotion_text}")
-                dialogue_preview.markdown(f"💬 \"{dialogue[:100]}{'...' if len(dialogue) > 100 else ''}\"")
-                
-                try:
-                    # Get voice model for this character
-                    voice_name = st.session_state.character_voices.get(character)
-                    voice_model_id = get_voice_model_id(voice_name)
+                st.write(f"- **{character}**: {settings['voice']} (Speed: {settings['speed']})")
+            
+            st.write(f"- **Background Music**: {st.session_state.background_track}")
+            if st.session_state.background_track != "None":
+                st.write(f"- **Background Volume**: {int(st.session_state.bg_volume * 100)}%")
+            
+            # Generate button
+            if st.button("Generate Full Audio"):
+                if st.session_state.api_provider == "openai" and not st.session_state.api_key:
+                    st.error("Please set your OpenAI API key in the Settings tab.")
+                elif st.session_state.api_provider == "playht" and (not st.session_state.playht_key or not st.session_state.playht_user_id):
+                    st.error("Please set your PlayHT API credentials in the Settings tab.")
+                else:
+                    # Clear previous audio files
+                    st.session_state.audio_files = []
                     
-                    # Generate audio for this dialogue
-                    audio_file = generate_voice(
-                        text=dialogue,
-                        voice_model=voice_model_id,
-                        speed=speed,
-                        pitch=pitch,
-                        emotion=entry.get('emotion', None)
-                    )
+                    # Progress bar
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
                     
-                    if audio_file:
-                        st.session_state.audio_files.append({
-                            'character': character,
-                            'dialogue': dialogue,
-                            'file_path': audio_file
+                    # Generate audio for each dialogue item
+                    total_items = len(st.session_state.parsed_data)
+                    
+                    for i, item in enumerate(st.session_state.parsed_data):
+                        character = item["character"]
+                        dialogue = item["dialogue"]
+                        emotion = item["emotion"]
+                        
+                        # Update progress
+                        progress = (i / total_items)
+                        progress_bar.progress(progress)
+                        status_text.text(f"Generating audio for {character}: {dialogue[:30]}...")
+                        
+                        # Get voice settings for this character
+                        settings = st.session_state.voice_settings.get(character, {
+                            "voice": list(openai_voice_models.keys())[0],
+                            "speed": 1.0,
+                            "pitch": 0
                         })
-                except Exception as e:
-                    st.error(f"Error generating audio for {character}: {str(e)}")
-                
-                # Update progress
-                progress_bar.progress((i + 1) / len(st.session_state.parsed_data))
-            
-            # Combine all audio files
-            if st.session_state.audio_files:
-                status_text.text("Combining audio files...")
-                try:
-                    file_paths = [af['file_path'] for af in st.session_state.audio_files]
+                        
+                        voice_model = get_voice_model_id(settings["voice"])
+                        
+                        # Generate voice audio
+                        audio_file = generate_voice(
+                            dialogue,
+                            voice_model,
+                            settings["speed"],
+                            settings["pitch"],
+                            emotion
+                        )
+                        
+                        if audio_file:
+                            st.session_state.audio_files.append(audio_file)
                     
-                    # Get background track and volume settings
-                    background_track = BACKGROUND_TRACKS.get(st.session_state.background_track)
-                    bg_volume = st.session_state.bg_volume
+                    # Combine all audio files with background music
+                    progress_bar.progress(0.95)
+                    status_text.text("Combining audio files...")
                     
-                    # If background track is selected, add an info message
-                    if background_track and background_track != "None":
-                        status_text.text(f"Adding '{st.session_state.background_track}' background track...")
+                    bg_track = BACKGROUND_TRACKS.get(st.session_state.background_track)
                     
-                    # Combine audio with background music if selected
                     final_audio = combine_audio_files(
-                        file_paths, 
-                        background_track=background_track, 
-                        bg_volume=bg_volume
+                        st.session_state.audio_files,
+                        bg_track,
+                        st.session_state.bg_volume
                     )
                     
-                    st.session_state.final_audio = final_audio
+                    # Complete!
+                    progress_bar.progress(1.0)
                     status_text.text("Audio generation complete!")
                     
-                    # Continue button
-                    if st.button("Continue to Audio Output"):
-                        st.session_state.current_step = 4
-                        st.rerun()
+                    if final_audio:
+                        st.session_state.final_audio = final_audio
                         
-                except Exception as e:
-                    st.error(f"Error combining audio files: {str(e)}")
-
-# Step 4: Audio Output
-elif st.session_state.current_step == 4:
-    st.header("Step 4: Listen to Your Audio Story")
-    
-    if not st.session_state.final_audio:
-        st.warning("Please generate audio first!")
-        if st.button("Go Back to Voice Generation"):
-            st.session_state.current_step = 3
-            st.rerun()
-    else:
-        st.subheader("Final Audio")
-        
-        # Show background track info if used
-        if st.session_state.background_track != "None":
-            st.info(f"Background Track: {st.session_state.background_track} (Volume: {int(st.session_state.bg_volume * 100)}%)")
-        
-        # Display audio player
-        st.markdown("<div class=\"audio-container\">", unsafe_allow_html=True)
-        st.audio(st.session_state.final_audio)
-        st.markdown("</div>", unsafe_allow_html=True)
-        
-        # Download button
-        with open(st.session_state.final_audio, "rb") as file:
-            btn = st.download_button(
-                label="Download Audio",
-                data=file,
-                file_name="voicecanvas_story.mp3",
-                mime="audio/mp3"
-            )
-        
-        # Individual character audio clips
-        st.subheader("Individual Character Clips")
-        for audio_entry in st.session_state.audio_files:
-            with st.expander(f"{audio_entry['character']}: {audio_entry['dialogue'][:50]}..."):
-                st.markdown("<div class=\"audio-container\">", unsafe_allow_html=True)
-                st.audio(audio_entry['file_path'])
-                st.markdown("</div>", unsafe_allow_html=True)
-        
-        # Feedback section
-        st.subheader("Provide Feedback")
-        feedback = st.text_area("How was your experience? Any suggestions for improvement?")
-        if st.button("Submit Feedback"):
-            # Here you would typically save the feedback to a database
-            st.success("Thank you for your feedback!")
+                        # Display success message
+                        st.success("Your script has been converted to audio successfully!")
+                        
+                        # Play the combined audio
+                        st.subheader("Combined Audio")
+                        st.markdown("<div class='audio-container'>", unsafe_allow_html=True)
+                        st.audio(final_audio)
+                        st.markdown("</div>", unsafe_allow_html=True)
+                        
+                        # Download button for the final audio
+                        with open(final_audio, "rb") as f:
+                            st.download_button(
+                                label="Download Full Audio",
+                                data=f,
+                                file_name=f"voicecanvas_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp3",
+                                mime="audio/mp3"
+                            )
+                    else:
+                        st.error("Failed to generate combined audio.")
             
-        # Start over button
-        if st.button("Start New Project"):
-            # Reset session state
+            # Display previously generated audio if available
+            if st.session_state.final_audio:
+                st.subheader("Previously Generated Audio")
+                st.markdown("<div class='audio-container'>", unsafe_allow_html=True)
+                st.audio(st.session_state.final_audio)
+                st.markdown("</div>", unsafe_allow_html=True)
+                
+                # Download button for the final audio
+                with open(st.session_state.final_audio, "rb") as f:
+                    st.download_button(
+                        label="Download Full Audio",
+                        data=f,
+                        file_name=f"voicecanvas_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp3",
+                        mime="audio/mp3"
+                    )
+            
+            # Navigation button
+            if st.button("Back to Voice Assignment"):
+                st.session_state.current_step = 2
+                st.rerun()
+                
+    # Voice Clone Studio Tab
+    with tabs[1]:
+        st.header("Voice Clone Studio")
+        st.write("Create your own custom voice clone with PlayHT technology.")
+        
+        # Display a simple explanation
+        st.markdown("""
+        ### Create Your Own Voice
+        Upload a voice sample and create a digital copy of any voice in seconds.
+        Your custom voices can be used in the Script to Voice tab for any character.
+        """)
+        
+        # API settings are already set
+        
+        # Simple interface for voice list
+        if st.button("Refresh My Voices", key="refresh_voices"):
+            with st.spinner("Loading your voices..."):
+                st.session_state.playht_voice_models = get_playht_voices()
+        
+        # Display voices in a clean way
+        if st.session_state.playht_voice_models:
+            st.subheader("Your Voices")
+            
+            # Create columns for the voices
+            cols = st.columns(2)
+            
+            for i, voice in enumerate(st.session_state.playht_voice_models):
+                voice_id = voice.get('id')
+                voice_name = voice.get('name', 'Unknown')
+                
+                # Alternate between columns
+                with cols[i % 2]:
+                    with st.container():
+                        st.markdown(f"### {voice_name}")
+                        
+                        # Test button
+                        if st.button(f"🔊 Test", key=f"test_{voice_id}"):
+                            with st.spinner("Generating sample..."):
+                                test_text = "This is my voice. How does it sound?"
+                                
+                                audio_file = generate_voice_playht(
+                                    test_text,
+                                    voice_id,
+                                    1.0,
+                                    0,
+                                    None
+                                )
+                                
+                                if audio_file:
+                                    st.audio(audio_file)
+                        
+                        st.write("---")
+        else:
+            st.info("No custom voices found. Create one below!")
+        
+        # Simplified voice creation
+        st.subheader("Create New Voice")
+        
+        # Single column layout
+        voice_name = st.text_input("Voice Name:", value="My Voice")
+        
+        # Audio upload with clear instruction
+        st.write("Upload a clear voice recording (MP3 format, 30+ seconds of speaking)")
+        uploaded_audio = st.file_uploader("Choose audio file", type=["mp3"], key="voice_upload")
+        
+        if uploaded_audio:
+            st.write("Preview your sample:")
+            st.audio(uploaded_audio)
+            
+            if st.button("Create Voice", key="create_voice_btn"):
+                with st.spinner("Processing your voice... This takes about 2-3 minutes."):
+                    # Save uploaded audio to temp file
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
+                        temp_file.write(uploaded_audio.getvalue())
+                        audio_path = temp_file.name
+                    
+                    # Create voice clone with minimal parameters
+                    voice_id = create_playht_voice_clone(
+                        voice_name,
+                        audio_path,
+                        f"Voice clone created on {datetime.now().strftime('%Y-%m-%d')}"
+                    )
+                    
+                    if voice_id:
+                        st.session_state.custom_voice_id = voice_id
+                        st.session_state.voice_clone_status = "processing"
+                        st.success("✅ Voice creation started!")
+                        st.info("Your voice will be ready in a few minutes. Click 'Check Status' to see if it's ready.")
+                    else:
+                        st.error("Voice creation failed. Please try again.")
+        
+        # Simple status check
+        if st.session_state.custom_voice_id and st.session_state.voice_clone_status == "processing":
+            if st.button("Check Status", key="check_status_btn"):
+                with st.spinner("Checking voice status..."):
+                    status = check_playht_voice_clone_status(st.session_state.custom_voice_id)
+                    
+                    if status:
+                        clone_status = status.get('status', 'unknown')
+                        
+                        if clone_status == "completed":
+                            st.success("🎉 Your voice is ready!")
+                            st.session_state.voice_clone_status = "completed"
+                            
+                            # Refresh voice list
+                            st.session_state.playht_voice_models = get_playht_voices()
+                            
+                            # Test audio
+                            test_text = "Congratulations! Your voice clone is ready to use."
+                            audio_file = generate_voice_playht(
+                                test_text,
+                                st.session_state.custom_voice_id,
+                                1.0, 0, None
+                            )
+                            
+                            if audio_file:
+                                st.audio(audio_file)
+                                
+                        elif clone_status == "processing":
+                            st.info("⏳ Still processing... Check back in a minute.")
+                        else:
+                            st.warning(f"Status: {clone_status}")
+                    else:
+                        st.error("Could not check status. Try refreshing the page.")
+    
+    # Settings Tab
+    with tabs[2]:
+        st.header("Settings")
+        
+        # API Provider selection
+        st.subheader("API Provider")
+        api_provider = st.radio(
+            "Select Voice API Provider:",
+            options=["OpenAI", "PlayHT"],
+            index=0 if st.session_state.api_provider == "openai" else 1,
+            horizontal=True
+        )
+        
+        # Update API provider in session state (converted to lowercase)
+        st.session_state.api_provider = api_provider.lower()
+        
+        # OpenAI API settings
+        if api_provider == "OpenAI":
+            st.subheader("OpenAI API Settings")
+            
+            st.markdown("<div class='api-input'>", unsafe_allow_html=True)
+            api_key = st.text_input(
+                "OpenAI API Key:",
+                value=st.session_state.api_key or "",
+                type="password",
+                help="Enter your OpenAI API key. It will be stored only for this session."
+            )
+            
+            if api_key:
+                st.session_state.api_key = api_key
+            
+            # Test connection button
+            if st.button("Test OpenAI Connection"):
+                if not st.session_state.api_key:
+                    st.error("Please enter your OpenAI API key.")
+                else:
+                    with st.spinner("Testing connection to OpenAI API..."):
+                        client = get_openai_client()
+                        if client:
+                            try:
+                                # Test with a simple model call
+                                with client.audio.speech.with_streaming_response.create(
+                                    model="tts-1",
+                                    voice="alloy",
+                                    input="Connection test successful."
+                                ) as response:
+                                    # If we get here without exception, the API key is valid
+                                    pass
+                                st.success("Connection to OpenAI API successful!")
+                            except Exception as e:
+                                st.error(f"Connection failed: {str(e)}")
+                        else:
+                            st.error("Failed to initialize OpenAI client.")
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Link to OpenAI API docs
+            st.markdown("""
+            To get an OpenAI API key:
+            1. Visit [OpenAI's platform](https://platform.openai.com/signup)
+            2. Create an account or sign in
+            3. Navigate to the API keys section
+            4. Create a new API key
+            """)
+        
+        # PlayHT API settings
+        elif api_provider == "PlayHT":
+            st.subheader("PlayHT API Settings")
+            
+            st.markdown("<div class='api-input'>", unsafe_allow_html=True)
+            playht_key = st.text_input(
+                "PlayHT API Key:",
+                value=st.session_state.playht_key,
+                type="password",
+                help="Enter your PlayHT API key."
+            )
+            
+            playht_user_id = st.text_input(
+                "PlayHT User ID:",
+                value=st.session_state.playht_user_id,
+                type="password",
+                help="Enter your PlayHT User ID."
+            )
+            
+            if playht_key:
+                st.session_state.playht_key = playht_key
+            
+            if playht_user_id:
+                st.session_state.playht_user_id = playht_user_id
+            
+            # Test connection button
+            if st.button("Test PlayHT Connection"):
+                if not st.session_state.playht_key or not st.session_state.playht_user_id:
+                    st.error("Please enter both your PlayHT API key and User ID.")
+                else:
+                    with st.spinner("Testing connection to PlayHT API..."):
+                        try:
+                            # Make a simple API call to check credentials using the v1 API
+                            url = "https://api.play.ht/api/v1/voices"
+                            headers = {
+                                "Accept": "application/json",
+                                "Authorization": st.session_state.playht_key,
+                                "X-User-ID": st.session_state.playht_user_id
+                            }
+                            
+                            response = requests.get(url, headers=headers)
+                            
+                            if response.status_code == 200:
+                                # Store voice models in session state
+                                result = response.json()
+                                voices = result.get('voices', [])
+                                
+                                # Format the voices to match our app structure
+                                cloned_voices = []
+                                for voice in voices:
+                                    if voice.get('voice_engine') == 'PlayHT Cloned':
+                                        formatted_voice = {
+                                            'id': voice.get('id'),
+                                            'name': voice.get('name'),
+                                            'isCloned': True,
+                                            'created_at': voice.get('created_at', 'Unknown date')
+                                        }
+                                        cloned_voices.append(formatted_voice)
+                                
+                                st.session_state.playht_voice_models = cloned_voices
+                                
+                                st.success("Connection to PlayHT API successful!")
+                                
+                                if cloned_voices:
+                                    st.info(f"Found {len(cloned_voices)} cloned voices in your account.")
+                                else:
+                                    st.info("No cloned voices found in your account yet. Create one in the Voice Clone Studio tab.")
+                            else:
+                                st.error(f"Connection failed: {response.status_code} - {response.text}")
+                        except Exception as e:
+                            st.error(f"Connection failed: {str(e)}")
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Link to PlayHT API docs
+            st.markdown("""
+            To get PlayHT API credentials:
+            1. Visit [PlayHT](https://play.ht/sign-up) to create an account
+            2. Once logged in, navigate to the dashboard
+            3. Go to API Access to find your API Key and User ID
+            4. Copy these credentials and paste them here
+            """)
+        
+        # Reset settings button
+        if st.button("Reset All Settings"):
+            for key in ['character_voices', 'audio_files', 'final_audio', 'current_step', 
+                       'voice_settings', 'background_track', 'bg_volume']:
+                if key in st.session_state:
+                    del st.session_state[key]
+            
+            # Reinitialize with defaults
             st.session_state.parsed_data = []
             st.session_state.character_voices = {}
             st.session_state.audio_files = []
             st.session_state.final_audio = None
+            st.session_state.current_step = 1
+            st.session_state.voice_settings = {}
             st.session_state.background_track = "None"
             st.session_state.bg_volume = 0.3
-            st.session_state.current_step = 1
+            
+            st.success("All settings have been reset to defaults.")
             st.rerun()
+    
+    # About Tab
+    with tabs[3]:
+        st.header("About VoiceCanvas")
+        
+        st.write("""
+        **VoiceCanvas** is a powerful tool for transforming written scripts into expressive voice audio.
+        
+        ### Key Features:
+        
+        - **Multi-character Voice Generation**: Convert dialogues between multiple characters, each with their own voice.
+        - **Emotion Support**: Add emotional context to the voices by specifying emotions in your script.
+        - **Background Music**: Add ambient music to enhance the atmosphere of your audio.
+        - **Voice Cloning**: Create custom voice clones with PlayHT technology.
+        - **Simple Format**: Use an intuitive format for your scripts: `Character (emotion): Dialogue`
+        
+        ### Use Cases:
+        
+        - Creating audiobooks with multiple characters
+        - Developing voice content for games and animations
+        - Prototyping podcast scripts
+        - Creating educational content with different voices
+        - Accessibility tools for converting text to speech
+        
+        ### Credits:
+        
+        - Voice synthesis powered by OpenAI's TTS API and PlayHT
+        - Audio processing with Pydub
+        - UI built with Streamlit
+        """)
+        
+        # Version info
+        st.info("Version 1.0.0")
 
-# Footer
-st.markdown("---")
-st.markdown("© 2025 VoiceCanvas | Developed for KUKU FM Project K")
+# Run the app
+if __name__ == "__main__":
+    main()
